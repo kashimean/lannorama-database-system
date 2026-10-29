@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lannorama Database System</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Header -->
+    <header>
+        <div class="brand">
+            <div class="brand-icon">📹</div>
+            <div>
+                <h1>Lannorama Database System</h1>
+                <p>Equipment Checkout & Inventory Manager</p>
+            </div>
+        </div>
+        <div class="status-badge" id="syncStatusBadge">
+            <span class="status-dot" id="syncStatusDot"></span>
+            <span id="syncStatusText">Local Storage Mode</span>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <div class="app-container">
+        
+        <!-- Sidebar Navigation -->
+        <sidebar>
+            <a class="nav-item active" data-tab="checkout">
+                <span>⚡</span>
+                <span>New Checkout</span>
+            </a>
+            <a class="nav-item" data-tab="active-checkouts">
+                <span>📋</span>
+                <span>Active Checkouts</span>
+                <span class="badge" id="activeBadgeCount">0</span>
+            </a>
+            <a class="nav-item" data-tab="inventory">
+                <span>🎥</span>
+                <span>Inventory</span>
+            </a>
+            <a class="nav-item" data-tab="roster">
+                <span>🎓</span>
+                <span>Students Roster</span>
+            </a>
+            <a class="nav-item" data-tab="settings">
+                <span>⚙️</span>
+                <span>Cloud & Settings</span>
+            </a>
+        </sidebar>
+
+        <!-- Content Area -->
+        <main>
+
+            <!-- TAB 1: NEW CHECKOUT -->
+            <div id="tab-checkout" class="tab-content active">
+                
+                <!-- Quick Stats -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-info">
+                            <h4>Active Checkouts</h4>
+                            <div class="value" id="statActive">0</div>
+                        </div>
+                        <div class="stat-icon indigo">📋</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-info">
+                            <h4>Overdue Items</h4>
+                            <div class="value" id="statOverdue">0</div>
+                        </div>
+                        <div class="stat-icon amber">⚠️</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-info">
+                            <h4>Total Gear Types</h4>
+                            <div class="value" id="statGearTypes">0</div>
+                        </div>
+                        <div class="stat-icon cyan">📹</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-info">
+                            <h4>Registered Students</h4>
+                            <div class="value" id="statStudents">0</div>
+                        </div>
+                        <div class="stat-icon emerald">🎓</div>
+                    </div>
+                </div>
+
+                <!-- Checkout Form Panel -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">
+                            <span>📝</span> Create New Checkout Record
+                        </div>
+                    </div>
+
+                    <form id="checkoutForm">
+                        <div class="form-grid">
+                            
+                            <!-- Student Name -->
+                            <div class="form-group">
+                                <label for="studentNameInput">Student Name *</label>
+                                <input type="text" id="studentNameInput" list="studentList" placeholder="Start typing student name..." required autocomplete="off">
+                                <datalist id="studentList"></datalist>
+                            </div>
+
+                            <!-- Class Type -->
+                            <div class="form-group">
+                                <label for="classTypeSelect">Class Period / Group *</label>
+                                <select id="classTypeSelect" required>
+                                    <option value="" disabled selected>Select class...</option>
+                                    <option value="Beginning Digital Media">Beginning Digital Media</option>
+                                    <option value="Advanced Digital Media">Advanced Digital Media</option>
+                                    <option value="Yearbook">Yearbook</option>
+                                    <option value="Leadership/ASB">Leadership/ASB</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
+
+                            <!-- Equipment Select -->
+                            <div class="form-group">
+                                <label for="equipmentSelect">Equipment Item *</label>
+                                <select id="equipmentSelect" required>
+                                    <option value="" disabled selected>Select equipment to check out...</option>
+                                </select>
+                            </div>
+
+                            <!-- Return Date -->
+                            <div class="form-group">
+                                <label for="returnDateInput">Expected Return Date *</label>
+                                <input type="date" id="returnDateInput" required>
+                                <div class="preset-buttons">
+                                    <button type="button" class="preset-btn" id="presetToday">End of Today</button>
+                                    <button type="button" class="preset-btn" id="presetTomorrow">Tomorrow</button>
+                                    <button type="button" class="preset-btn" id="preset3Days">In 3 Days</button>
+                                    <button type="button" class="preset-btn" id="preset1Week">1 Week</button>
+                                </div>
+                            </div>
+
+                            <!-- Accessories & Notes -->
+                            <div class="form-group full-width">
+                                <label for="accessoriesInput">Accessories Included & Condition Notes</label>
+                                <textarea id="accessoriesInput" placeholder="e.g. 18-55mm lens, 64GB SD Card, 2x Batteries, Soft Case, Minor scratch on body..."></textarea>
+                                <div class="quick-tags">
+                                    <span class="tag-btn" data-tag="+ SD Card (64GB)">+ SD Card</span>
+                                    <span class="tag-btn" data-tag="+ Extra Battery">+ Extra Battery</span>
+                                    <span class="tag-btn" data-tag="+ Charger">+ Charger</span>
+                                    <span class="tag-btn" data-tag="+ Lens (18-55mm)">+ 18-55mm Lens</span>
+                                    <span class="tag-btn" data-tag="+ Tripod Plate">+ Tripod Plate</span>
+                                    <span class="tag-btn" data-tag="+ Soft Case">+ Carrying Case</span>
+                                    <span class="tag-btn" data-tag="+ Mic + Deadcat">+ Wireless Mic</span>
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <div style="margin-top: 24px; display: flex; justify-content: flex-end;">
+                            <button type="submit" class="btn btn-primary" style="padding: 12px 28px; font-size: 1rem;">
+                                🚀 Complete Checkout
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+            </div>
+
+            <!-- TAB 2: ACTIVE CHECKOUTS -->
+            <div id="tab-active-checkouts" class="tab-content">
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">
+                            <span>📋</span> Currently Checked Out Gear
+                        </div>
+                        <input type="text" id="searchActiveInput" placeholder="🔍 Search student, item, or class..." style="width: 260px;">
+                    </div>
+
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Student</th>
+                                    <th>Class</th>
+                                    <th>Equipment Item</th>
+                                    <th>Accessories & Condition</th>
+                                    <th>Checked Out</th>
+                                    <th>Return Due</th>
+                                    <th>Status</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="activeCheckoutsTableBody">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 3: INVENTORY -->
+            <div id="tab-inventory" class="tab-content">
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">
+                            <span>🎥</span> Equipment Inventory & Stock Control
+                        </div>
+                        <button class="btn btn-primary btn-sm" id="btnOpenAddEquipment">
+                            + Add New Equipment Type
+                        </button>
+                    </div>
+
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Equipment Name</th>
+                                    <th>Category</th>
+                                    <th>Max Stock</th>
+                                    <th>Checked Out</th>
+                                    <th>Available</th>
+                                    <th>Stock Level</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="inventoryTableBody">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 4: STUDENTS ROSTER -->
+            <div id="tab-roster" class="tab-content">
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">
+                            <span>🎓</span> Registered Student Roster
+                        </div>
+                        <div style="display: flex; gap: 12px;">
+                            <input type="text" id="searchStudentInput" placeholder="🔍 Search student..." style="width: 220px;">
+                            <button class="btn btn-primary btn-sm" id="btnOpenAddStudent">
+                                + Add New Student
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Student Name</th>
+                                    <th>Default Class</th>
+                                    <th>Active Items Checked Out</th>
+                                    <th>Total Lifetime Checkouts</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="rosterTableBody">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 5: SETTINGS & CLOUD SYNC -->
+            <div id="tab-settings" class="tab-content">
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">
+                            <span>☁️</span> Google Sheets Live Cloud Storage Integration
+                        </div>
+                    </div>
+
+                    <p style="color: var(--text-muted); font-size: 0.92rem; margin-bottom: 20px;">
+                        By connecting your Google Sheet Web App URL below, <strong>all equipment names, student rosters, and checkout logs will sync dynamically from your spreadsheet</strong>. You will never need to edit code to update options!
+                    </p>
+
+                    <div class="form-grid">
+                        <div class="form-group full-width">
+                            <label for="googleWebAppUrlInput">Google Apps Script Web App URL</label>
+                            <input type="text" id="googleWebAppUrlInput" placeholder="https://script.google.com/macros/s/AKfycbx.../exec">
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 20px; display: flex; gap: 12px;">
+                        <button class="btn btn-primary" id="btnSaveCloudSettings">
+                            💾 Save Web App URL
+                        </button>
+                        <button class="btn btn-secondary" id="btnSyncNow">
+                            🔄 Sync Data Now
+                        </button>
+                    </div>
+                </div>
+
+                <!-- OFFLINE QUEUE PANEL -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">
+                            <span>📡</span> Offline Queue & Sync Status
+                        </div>
+                        <button class="btn btn-primary btn-sm" id="btnFlushQueue">
+                            📤 Push Pending Changes
+                        </button>
+                    </div>
+
+                    <p style="color: var(--text-muted); font-size: 0.92rem; margin-bottom: 18px;">
+                        Every checkout, student registration, and inventory edit is <strong>saved locally first</strong>. If Google Sheets can't be reached, changes are held in this queue and automatically pushed the moment the connection returns.
+                    </p>
+
+                    <div class="queue-summary">
+                        <div class="queue-stat">
+                            <h4>Pending Changes Queued</h4>
+                            <div class="value" id="queueCountDisplay">0</div>
+                        </div>
+                        <div class="queue-stat">
+                            <h4>Connection</h4>
+                            <div class="value" id="connectionDisplay">Online</div>
+                        </div>
+                        <div class="queue-stat">
+                            <h4>Last Successful Sync</h4>
+                            <div class="value" id="lastSyncDisplay" style="font-size: 1rem;">Never</div>
+                        </div>
+                    </div>
+
+                    <div class="queue-list" id="queueList">
+                        <div class="queue-empty">Queue is empty — everything is synced.</div>
+                    </div>
+
+                    <div style="margin-top: 16px; display: flex; gap: 12px;">
+                        <button class="btn btn-secondary" id="btnVerifySync">
+                            🔎 Verify Changes Reached the Sheet
+                        </button>
+                    </div>
+
+                    <div style="margin-top: 16px;">
+                        <label style="font-weight: 600; color: var(--text-main); display: block; margin-bottom: 6px;">Sync Activity Log</label>
+                        <div id="syncLog" class="sync-log">
+                            <div class="queue-empty">No sync activity yet.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- UPDATER PANEL -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">
+                            <span>⬆️</span> Auto-Updater
+                        </div>
+                        <span class="badge-pill badge-class" id="updaterVersionText">v0.0.0</span>
+                    </div>
+
+                    <p style="color: var(--text-muted); font-size: 0.92rem; margin-bottom: 18px;">
+                        The installed EXE checks the release feed on launch and every 12 hours. When a newer version is found, you can download and install it from here — no need to hunt for a new installer file.
+                    </p>
+
+                    <div class="updater-status" id="updaterStatusText">Updater idle</div>
+
+                    <div style="margin-top: 16px; display: flex; gap: 12px; flex-wrap: wrap;">
+                        <button class="btn btn-secondary" id="btnCheckUpdates">🔎 Check for Updates</button>
+                        <button class="btn btn-primary" id="btnDownloadUpdate" disabled>⬇️ Download Update</button>
+                        <button class="btn btn-success" id="btnInstallUpdate" disabled>✅ Install & Restart</button>
+                    </div>
+                </div>
+
+                <!-- Google Apps Script Setup Instructions Panel -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">
+                            <span>📖</span> How to Connect Your Google Sheet (Step-by-Step)
+                        </div>
+                    </div>
+
+                    <div style="font-size: 0.9rem; color: var(--text-muted); line-height: 1.6;">
+                        <ol style="margin-left: 20px; display: flex; flex-direction: column; gap: 10px;">
+                            <li>Open your Google Sheet. Ensure it has 3 tabs named exactly: <strong><code>Equipment</code></strong>, <strong><code>Students</code></strong>, and <strong><code>Checkouts</code></strong>.</li>
+                            <li>Click on <strong>Extensions &gt; Apps Script</strong> in the top Google Sheet menu bar.</li>
+                            <li>Delete any default code in the script editor, and paste the copyable Google Apps Script code below.</li>
+                            <li>Click <strong>Deploy &gt; New deployment</strong> (top right). Select type <strong>Web app</strong>.</li>
+                            <li>Set <i>Execute as:</i> <strong>Me</strong> and <i>Who has access:</i> <strong>Anyone</strong>. Click <strong>Deploy</strong>.</li>
+                            <li>Copy the resulting <strong>Web App URL</strong> and paste it into the input box above!</li>
+                        </ol>
+
+                        <div style="margin-top: 16px;">
+                            <label style="font-weight: 600; color: var(--text-main); display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                <span>Copyable Google Apps Script Code:</span>
+                                <button class="btn btn-secondary btn-sm" id="btnCopyScriptCode">📋 Copy Script Code</button>
+                            </label>
+                            <textarea id="appsScriptCodeTextarea" readonly style="font-family: monospace; font-size: 0.8rem; height: 180px; background-color: var(--bg-dark); color: #a5f3fc;"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">
+                            <span>🛠️</span> Local Database Backup
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                        <button class="btn btn-secondary" id="btnExportData">
+                            📥 Export Backup (JSON)
+                        </button>
+                        <button class="btn btn-secondary" id="btnLoadSampleData">
+                            🔄 Restore Default Sample Data
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- MODAL 1: STUDENT NOT REGISTERED -->
+    <div class="modal-overlay" id="modalRegisterStudent">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 style="color: var(--warning);">⚠️ Student Not Registered</h3>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom: 12px;">
+                    <strong id="unregisteredStudentNameDisplay" style="color: var(--text-main);"></strong> is not currently registered in the database.
+                </p>
+                <p style="margin-bottom: 16px;">Would you like to register this student right now?</p>
+
+                <div class="form-group">
+                    <label for="modalStudentClassSelect">Assign Student Class Period:</label>
+                    <select id="modalStudentClassSelect">
+                        <option value="Beginning Digital Media">Beginning Digital Media</option>
+                        <option value="Advanced Digital Media">Advanced Digital Media</option>
+                        <option value="Yearbook">Yearbook</option>
+                        <option value="Leadership/ASB">Leadership/ASB</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="btnCancelRegister">Cancel</button>
+                <button class="btn btn-primary" id="btnConfirmRegister">Register & Continue</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 2: STOCK WARNING -->
+    <div class="modal-overlay" id="modalStockWarning">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 style="color: var(--warning);">⚠️ Stock Limit Reached</h3>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom: 12px;">
+                    All available units of <strong id="stockWarningItemName" style="color: var(--text-main);"></strong> are currently checked out.
+                </p>
+                <p>Do you still want to proceed with this checkout?</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="btnCancelStockOverride">Cancel</button>
+                <button class="btn btn-danger" id="btnConfirmStockOverride">Proceed Anyway</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 3: ADD/EDIT EQUIPMENT -->
+    <div class="modal-overlay" id="modalEquipment">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 id="modalEquipmentTitle">Add New Equipment</h3>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editEquipmentId">
+                <div class="form-group" style="margin-bottom: 14px;">
+                    <label for="equipNameInput">Equipment Name *</label>
+                    <input type="text" id="equipNameInput" placeholder="e.g. Sony FX3 Cinema Camera" required>
+                </div>
+                <div class="form-group" style="margin-bottom: 14px;">
+                    <label for="equipCategorySelect">Category</label>
+                    <select id="equipCategorySelect">
+                        <option value="Camera">Camera Body</option>
+                        <option value="Lens">Lens</option>
+                        <option value="Audio">Audio / Microphone</option>
+                        <option value="Lighting">Lighting</option>
+                        <option value="Support">Tripod / Support / Gimbal</option>
+                        <option value="Accessory">Accessory / Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="equipStockInput">Total Stock Quantity *</label>
+                    <input type="number" id="equipStockInput" min="1" value="1" required>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="btnCloseEquipModal">Cancel</button>
+                <button class="btn btn-primary" id="btnSaveEquipment">Save Equipment</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 4: ADD/EDIT STUDENT -->
+    <div class="modal-overlay" id="modalStudent">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 id="modalStudentTitle">Add Student</h3>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editStudentId">
+                <div class="form-group" style="margin-bottom: 14px;">
+                    <label for="studentFullNameInput">Student Full Name *</label>
+                    <input type="text" id="studentFullNameInput" placeholder="e.g. Jane Doe" required>
+                </div>
+                <div class="form-group">
+                    <label for="studentClassTypeSelect">Class Period *</label>
+                    <select id="studentClassTypeSelect">
+                        <option value="Beginning Digital Media">Beginning Digital Media</option>
+                        <option value="Advanced Digital Media">Advanced Digital Media</option>
+                        <option value="Yearbook">Yearbook</option>
+                        <option value="Leadership/ASB">Leadership/ASB</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="btnCloseStudentModal">Cancel</button>
+                <button class="btn btn-primary" id="btnSaveStudent">Save Student</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toast-container"></div>
+
+    <!-- Script -->
+    <script src="renderer.js"></script>
+</body>
+</html>

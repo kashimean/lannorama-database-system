@@ -1,0 +1,60 @@
+{
+  "name": "lannorama-database-system",
+  "version": "1.0.0",
+  "description": "Lannorama Database System - Digital Media equipment checkout tracker",
+  "author": "Lannorama",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "release": "electron-builder --win --publish always"
+  },
+  "dependencies": {
+    "electron-updater": "^6.2.4"
+  },
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.lannorama.databasesystem",
+    "productName": "Lannorama Database System",
+    "icon": "buildResources/icon.ico",
+    "directories": {
+      "output": "dist",
+      "buildResources": "buildResources"
+    },
+    "files": [
+      "src/**",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Lannorama Database System",
+      "artifactName": "Lannorama-Database-System-Setup-${version}.exe"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "kashimean",
+        "repo": "lannorama-database-system"
+      }
+    ]
+  }
+}
