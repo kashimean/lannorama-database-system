@@ -1198,6 +1198,40 @@ function escapeHtml(str) {
 refreshUI();
 renderQueueStatus();
 
+// --- AUTH / LOGIN GATE ---
+function startAuth() {
+    const role = currentRole();
+
+    if (role) {
+        applyRolePermissions(role);
+    } else {
+        showLoginGate(applyRolePermissions);
+    }
+
+    const btnSet = document.getElementById('btnSetTeacherPassword');
+    const btnOut = document.getElementById('btnLogout');
+    const input = document.getElementById('teacherPasswordInput');
+
+    if (btnSet) {
+        btnSet.addEventListener('click', async () => {
+            const pw = input.value.trim();
+            if (!pw) { showToast('Enter a password for the teacher.', 'error'); return; }
+            await setTeacherPassword(pw);
+            input.value = '';
+            showToast('Teacher password set.', 'success');
+        });
+    }
+
+    if (btnOut) {
+        btnOut.addEventListener('click', () => {
+            logout();
+            location.reload();
+        });
+    }
+}
+
+startAuth();
+
 if (settings.webAppUrl) {
     syncFromCloud(false);
 } else {

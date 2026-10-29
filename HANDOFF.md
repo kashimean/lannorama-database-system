@@ -2,23 +2,31 @@
 
 Project: `C:/Users/Colton/equipment-tracker`
 
-## Current state
-- Electron app, renamed **Lannorama Database System** (package.json productName, main.js title, index.html header).
-- Files: `package.json`, `src/main.js`, `src/preload.js`, `src/renderer.js`, `src/index.html`, `src/style.css`, `scripts/generate-icon.js`, `README.md`, `.gitignore`.
-- Google Sheets sync works (user confirmed). Offline-first queue: `queueChange()` → `flushQueue()` → `verifyQueue()` (verifies by reading sheet back; only clears queue when confirmed). Sync Activity Log + Verify button in Settings.
-- Apps Script must be redeployed as a NEW version (Deploy → Manage deployments → Edit → New version) — editing code alone does not update the `/exec` URL.
-- Auto-updater: `src/updater.js` (electron-updater), IPC via preload, Auto-Updater panel in Settings. Only active in packaged EXE. Checks on launch + every 12h. `autoDownload = false`.
-- Installer: electron-builder NSIS, `npm run dist:win`, artifact `Lannorama-Database-System-Setup-${version}.exe`. `build.publish` = github, owner placeholder `YOUR_GITHUB_USERNAME`, repo `lannorama-database-system`.
-- Icon: `scripts/generate-icon.js` writes `buildResources/icon.ico` (sizes 16/32/48/64/256). `package.json` build.icon points to it. Run `node scripts/generate-icon.js`.
-- `.gitignore`: node_modules/, dist/, .env, *.log.
+## Verified state (checked, not assumed)
+- Git: branch `main`, HEAD `6f4e4ef`, remote `https://github.com/kashimean/lannorama-database-system.git`, in sync (0 ahead / 0 behind), clean tree.
+- Token: classic PAT in `.env` (gitignored, confirmed not in any tracked file). Fine-grained token could NOT create releases (403); classic can.
+- Releases: `v1.0.1` is latest. Assets: `Lannorama-Database-System-Setup-1.0.1.exe`, `.exe.blockmap`, `latest.yml`. Verified `latest.yml` fetches 200.
+- Root cause of the updater error: `latest.yml` was missing from the v1.0.1 release assets (stale 1.0.0 files were uploaded because `dist/` was not cleaned). Fixed by uploading the missing assets, deleting stale ones, and making `scripts/publisher.js` clean `dist/` before building.
+- Updater reads **release assets via the Atom feed**, never repo files — adding `latest.yml` to git does nothing.
+- `win.signAndEditExecutable: false` in package.json is required here: electron-builder's winCodeSign cache extraction fails on this machine because symlink creation needs admin/Developer Mode. Consequence: icon is not embedded in the app EXE (installer/shortcuts still use `buildResources/icon.ico`).
+- Icon: `scripts/generate-icon.js` → `buildResources/icon.ico` (302,430 bytes).
+- Google Sheets sync confirmed working by user. Offline-first queue: `queueChange` → `flushQueue` → `verifyQueue` (queue clears only when changes are confirmed present in the sheet). Sync Activity Log + Verify button.
+- Apps Script must be redeployed as a NEW version for the `/exec` URL to change.
 
-## Publisher tool
-- `scripts/publisher.js` added: compares package.json version to latest GitHub Release; if newer, runs `npx electron-builder --win` and uploads dist artifacts (.exe, .yml, .blockmap) via GitHub API. Needs GH_TOKEN (+ optional GH_OWNER/GH_REPO). Node 18+ for fetch. Run: `node scripts/publisher.js`.
-- Installer output lives in `C:/Users/Colton/equipment-tracker/dist/` after a build: `Lannorama-Database-System-Setup-<version>.exe`, `latest.yml`, `.blockmap`. `latest.yml` is what the installed app reads.
+## Auth / lock mode (just added)
+- `src/auth.js` (browser script, loaded before renderer.js in index.html).
+- Admin password **2033**, hardcoded as SHA-256 hash in `ADMIN_HASH`:
+  `9212e5e6ef4106525be27ac4fcde2db1aa65f4e706eb469cea7f0baec27dcc96`
+  Regenerate with `node scripts/hash.js "password"`.
+- Teacher password: set only from the Developer Console, stored hashed in `localStorage` key `lds_auth`.
+- Login gate `#loginGate` hides `#appContainer` until a password is accepted.
+- Roles: `admin` (all tabs + Developer Console), `teacher` (checkout, active checkouts, roster only; Settings/Developer Console hidden).
+- `applyRolePermissions(role)` hides nav items and the dev panel; `#roleBadge` shows Developer/Teacher.
+- Developer Console panel `#devConsole` in Settings tab: set teacher password, Lock & Sign Out.
+- Caveat to tell the user: a client-side gate in a local app is not real security — anyone with the machine can inspect the code/localStorage. It stops casual use, not a determined user.
 
-## Pending / next steps
-1. GitHub repo setup: `git init`, remote, push. Needs PAT with `repo` scope + `GH_TOKEN`.
-2. Replace `YOUR_GITHUB_USERNAME` in package.json publish block.
-3. Optional `bump` script: `"bump": "npm version patch && electron-builder --win --publish always"`.
-4. **Kiosk mode** — user mentioned wanting a locked-down kiosk mode later (not started).
-5. No bash shell available in this environment — user runs commands themselves.
+## Next steps
+1. Test the login gate in the app (browser or `npm start`).
+2. Consider persisting `lds_auth` through the cloud so the teacher password syncs across machines.
+3. Kiosk mode was dropped by the user ("don't worry about kiosk mode").
+4. Publishing flow: `npm version patch --no-git-tag-version` → commit/push → `node scripts/publisher.js`.

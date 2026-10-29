@@ -8,6 +8,17 @@
 </head>
 <body>
 
+    <!-- LOGIN GATE -->
+    <div id="loginGate" class="login-gate">
+        <div class="login-card">
+            <div class="login-title">Lannorama Database System</div>
+            <div class="login-sub">Locked — enter password to continue</div>
+            <input type="password" id="loginPassword" class="login-input" placeholder="Password" autocomplete="off">
+            <div class="login-message" id="loginMessage"></div>
+            <button class="btn btn-primary" id="loginSubmit">Unlock</button>
+        </div>
+    </div>
+
     <!-- Header -->
     <header>
         <div class="brand">
@@ -20,11 +31,12 @@
         <div class="status-badge" id="syncStatusBadge">
             <span class="status-dot" id="syncStatusDot"></span>
             <span id="syncStatusText">Local Storage Mode</span>
+            <span class="role-badge" id="roleBadge">Locked</span>
         </div>
     </header>
 
     <!-- Main Container -->
-    <div class="app-container">
+    <div class="app-container" id="appContainer">
         
         <!-- Sidebar Navigation -->
         <sidebar>
@@ -366,6 +378,28 @@
                     </div>
                 </div>
 
+                <!-- DEVELOPER CONSOLE (admin only) -->
+                <div class="panel" id="devConsole" style="display:none;">
+                    <div class="panel-header">
+                        <div class="panel-title">
+                            <span>🔑</span> Developer Console
+                        </div>
+                        <span class="badge-pill badge-class">Admin</span>
+                    </div>
+
+                    <p style="color: var(--text-muted); font-size: 0.92rem; margin-bottom: 18px;">
+                        Set Mr. Lanning's password here. It is stored as a SHA-256 hash, never as plain text, and only this console can change it.
+                    </p>
+
+                    <label style="font-weight:600; display:block; margin-bottom:6px;">Teacher password</label>
+                    <input type="password" id="teacherPasswordInput" class="input" placeholder="New password for Mr. Lanning">
+                    <button class="btn btn-primary" id="btnSetTeacherPassword" style="margin-top:10px;">Set Teacher Password</button>
+
+                    <div style="margin-top:18px; display:flex; gap:12px; flex-wrap:wrap;">
+                        <button class="btn btn-secondary" id="btnLogout">Lock & Sign Out</button>
+                    </div>
+                </div>
+
                 <!-- Google Apps Script Setup Instructions Panel -->
                 <div class="panel">
                     <div class="panel-header">
@@ -533,6 +567,7 @@
     <div id="toast-container"></div>
 
     <!-- Script -->
+    <script src="auth.js"></script>
     <script src="renderer.js"></script>
 </body>
 </html>
