@@ -14,25 +14,31 @@ async function sha256(text) {
 
 function getAuth() {
     const raw = localStorage.getItem('lds_auth');
-    if (!raw) return { role: null, teacherHash: null };
-    try { return JSON.parse(raw); } catch (e) { return { role: null, teacherHash: null }; }
+    if (!raw) return { teacherHash: null };
+    try { return { teacherHash: JSON.parse(raw).teacherHash || null }; } catch (e) { return { teacherHash: null }; }
 }
 
 function saveAuth(auth) {
-    localStorage.setItem('lds_auth', JSON.stringify(auth));
+    // Only the teacher password hash is persisted. The role is session-only,
+    // so the app always asks for a password on launch.
+    localStorage.setItem('lds_auth', JSON.stringify({ teacherHash: auth.teacherHash }));
 }
+
+let sessionRole = null;
 
 async function attemptLogin(password) {
     const hash = await sha256(password);
 
     if (hash === ADMIN_HASH) {
-        saveAuth({ role: 'admin', teacherHash: getAuth().teacherHash });
+        sessionRole = 'admin';
+        saveAuth(getAuth());
         return 'admin';
     }
 
     const auth = getAuth();
     if (auth.teacherHash && hash === auth.teacherHash) {
-        saveAuth({ role: 'teacher', teacherHash: auth.teacherHash });
+        sessionRole = 'teacher';
+        saveAuth(auth);
         return 'teacher';
     }
 
@@ -47,12 +53,12 @@ async function setTeacherPassword(password) {
 }
 
 function logout() {
-    const auth = getAuth();
-    saveAuth({ role: null, teacherHash: auth.teacherHash });
+    sessionRole = null;
+    saveAuth(getAuth());
 }
 
 function currentRole() {
-    return getAuth().role;
+    return sessionRole;
 }
 
 // Permissions: teacher gets the checkout/roster/inventory tabs only.

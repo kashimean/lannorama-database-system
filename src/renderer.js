@@ -1199,14 +1199,10 @@ refreshUI();
 renderQueueStatus();
 
 // --- AUTH / LOGIN GATE ---
+// The password is required on every launch: the role is kept in memory only,
+// so nothing is remembered between runs except the teacher password hash.
 function startAuth() {
-    const role = currentRole();
-
-    if (role) {
-        applyRolePermissions(role);
-    } else {
-        showLoginGate(applyRolePermissions);
-    }
+    showLoginGate(applyRolePermissions);
 
     const btnSet = document.getElementById('btnSetTeacherPassword');
     const btnOut = document.getElementById('btnLogout');
