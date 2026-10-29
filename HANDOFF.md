@@ -19,6 +19,7 @@ Project: `C:/Users/Colton/equipment-tracker`
   `9212e5e6ef4106525be27ac4fcde2db1aa65f4e706eb469cea7f0baec27dcc96`
   Regenerate with `node scripts/hash.js "password"`.
 - Teacher password: set only from the Developer Console, stored hashed in `localStorage` key `lds_auth`.
+- Role is **session-only** (in-memory). Only the teacher hash persists, so the app asks for a password on every launch.
 - Login gate `#loginGate` hides `#appContainer` until a password is accepted.
 - Roles: `admin` (all tabs + Developer Console), `teacher` (checkout, active checkouts, roster only; Settings/Developer Console hidden).
 - `applyRolePermissions(role)` hides nav items and the dev panel; `#roleBadge` shows Developer/Teacher.
@@ -26,7 +27,7 @@ Project: `C:/Users/Colton/equipment-tracker`
 - Caveat to tell the user: a client-side gate in a local app is not real security — anyone with the machine can inspect the code/localStorage. It stops casual use, not a determined user.
 
 ## Next steps
-1. Test the login gate in the app (browser or `npm start`).
+1. Test the login gate in the app (browser or `npm start`). Logic is runtime-tested via a stubbed DOM (all assertions pass); the UI itself has not been exercised in Electron yet.
 2. Consider persisting `lds_auth` through the cloud so the teacher password syncs across machines.
 3. Kiosk mode was dropped by the user ("don't worry about kiosk mode").
 4. Publishing flow: `npm version patch --no-git-tag-version` → commit/push → `node scripts/publisher.js`.
