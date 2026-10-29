@@ -96,9 +96,18 @@ async function uploadAsset(releaseId, filePath) {
   }
 
   console.log('New version detected. Building...');
+
+  // Clean dist/ so stale artifacts from a previous build are never uploaded
+  const dist = path.join(ROOT, 'dist');
+  if (fs.existsSync(dist)) {
+    for (const f of fs.readdirSync(dist)) {
+      if (f === 'win-unpacked') continue;
+      fs.unlinkSync(path.join(dist, f));
+    }
+  }
+
   execSync('npx electron-builder --win', { cwd: ROOT, stdio: 'inherit' });
 
-  const dist = path.join(ROOT, 'dist');
   const files = fs.readdirSync(dist).filter(f => /\.(exe|blockmap)$/i.test(f) || /^latest\.yml$/i.test(f));
 
   if (files.length === 0) {
