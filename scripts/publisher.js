@@ -99,7 +99,7 @@ async function uploadAsset(releaseId, filePath) {
   execSync('npx electron-builder --win', { cwd: ROOT, stdio: 'inherit' });
 
   const dist = path.join(ROOT, 'dist');
-  const files = fs.readdirSync(dist).filter(f => /\.(exe|yml|blockmap)$/i.test(f));
+  const files = fs.readdirSync(dist).filter(f => /\.(exe|blockmap)$/i.test(f) || /^latest\.yml$/i.test(f));
 
   if (files.length === 0) {
     console.error('Nothing found in dist/ — build failed.');
