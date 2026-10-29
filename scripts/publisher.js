@@ -11,6 +11,23 @@ const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'))
 const build = pkg.build || {};
 const publish = (build.publish || [])[0] || {};
 
+// Load .env (gitignored) so the token is not hardcoded in any committed file
+function loadEnv() {
+  const file = path.join(ROOT, '.env');
+  if (!fs.existsSync(file)) return;
+  for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
+    const t = line.trim();
+    if (!t || t.startsWith('#')) continue;
+    const eq = t.indexOf('=');
+    if (eq === -1) continue;
+    const key = t.slice(0, eq).trim();
+    const val = t.slice(eq + 1).trim();
+    if (!process.env[key]) process.env[key] = val;
+  }
+}
+
+loadEnv();
+
 const OWNER = process.env.GH_OWNER || publish.owner;
 const REPO = process.env.GH_REPO || publish.repo;
 const TOKEN = process.env.GH_TOKEN;
