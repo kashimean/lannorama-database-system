@@ -32,6 +32,7 @@
             <span class="status-dot" id="syncStatusDot"></span>
             <span id="syncStatusText">Local Storage Mode</span>
             <span class="role-badge" id="roleBadge">Locked</span>
+            <button class="btn btn-secondary btn-sm" id="btnLogout" style="display:none;">🔒 Sign Out</button>
         </div>
     </header>
 
@@ -356,8 +357,8 @@
                     </div>
                 </div>
 
-                <!-- UPDATER PANEL -->
-                <div class="panel">
+                <!-- UPDATER PANEL (teacher may see this one panel in Settings) -->
+                <div class="panel" data-teacher-access="1">
                     <div class="panel-header">
                         <div class="panel-title">
                             <span>⬆️</span> Auto-Updater
@@ -394,10 +395,6 @@
                     <label style="font-weight:600; display:block; margin-bottom:6px;">Teacher password</label>
                     <input type="password" id="teacherPasswordInput" class="input" placeholder="New password for Mr. Lanning">
                     <button class="btn btn-primary" id="btnSetTeacherPassword" style="margin-top:10px;">Set Teacher Password</button>
-
-                    <div style="margin-top:18px; display:flex; gap:12px; flex-wrap:wrap;">
-                        <button class="btn btn-secondary" id="btnLogout">Lock & Sign Out</button>
-                    </div>
                 </div>
 
                 <!-- Google Apps Script Setup Instructions Panel -->

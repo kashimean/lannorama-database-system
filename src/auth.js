@@ -61,8 +61,9 @@ function currentRole() {
     return sessionRole;
 }
 
-// Permissions: teacher gets the checkout/roster/inventory tabs only.
-const TEACHER_TABS = ['checkout', 'active-checkouts', 'roster'];
+// Permissions: teacher gets checkout, active checkouts, roster, inventory,
+// and Settings — but inside Settings only panels marked data-teacher-access.
+const TEACHER_TABS = ['checkout', 'active-checkouts', 'roster', 'inventory', 'settings'];
 
 function applyRolePermissions(role) {
     document.querySelectorAll('.nav-item').forEach(item => {
@@ -74,11 +75,23 @@ function applyRolePermissions(role) {
         }
     });
 
+    // Inside Settings, hide every panel the teacher is not allowed to see.
+    document.querySelectorAll('#tab-settings .panel').forEach(panel => {
+        if (role === 'teacher') {
+            panel.style.display = panel.dataset.teacherAccess ? '' : 'none';
+        } else {
+            panel.style.display = '';
+        }
+    });
+
     const devPanel = document.getElementById('devConsole');
     if (devPanel) devPanel.style.display = role === 'admin' ? '' : 'none';
 
     const roleBadge = document.getElementById('roleBadge');
     if (roleBadge) roleBadge.textContent = role === 'admin' ? 'Developer' : 'Teacher';
+
+    const signOut = document.getElementById('btnLogout');
+    if (signOut) signOut.style.display = '';
 }
 
 function showLoginGate(onSuccess) {
