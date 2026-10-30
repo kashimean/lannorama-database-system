@@ -37,12 +37,12 @@ Project: `C:/Users/Colton/equipment-tracker`
 - **49ers theme** in `src/style.css` `:root`: `--primary #c6011f` (scarlet), `--accent`/`--warning`/`--border-focus` `#cfb154` (gold), dark warm base `--bg-dark #1a0a0c`, `--bg-card #2a1114`, `--border-color #4a2226`.
 - Splash is now fully opaque (`background: #1a0a0c` + radial scarlet glow) and `showSplash()` hides `#appContainer` and `#loginGate` while it is up, so nothing behind it is visible.
 - Real bug fixed: `.login-gate` used `var(--bg-main)`, which does not exist in `:root` (renders transparent, app shows through). Changed to `var(--bg-dark)`.
-- `src/main.js`: `fullscreen: true` in BrowserWindow options plus `win.setFullScreen(true)` after load; `backgroundColor` changed to `#1a0a0c`. F11 still toggles fullscreen.
+- `src/main.js`: launches **maximized** (`win.maximize()`), NOT fullscreen — title bar and taskbar remain visible. `backgroundColor` is `#1a0a0c`. Menu bar hidden via `setMenuBarVisibility(false)`. (Earlier fullscreen behavior was removed at the user's request.)
 - Build output for testing (NOT published): `dist/Lannorama-Database-System-Setup-1.0.4.exe` + blockmap + `win-unpacked`. Verified in `app.asar`: fullscreen, setFullScreen, c6011f, cfb154, and the Apps Script URL are all present. Latest GitHub release is still `v1.0.3`, so the update popup cannot fire from this local build.
 - Caveat to tell the user: a client-side gate in a local app is not real security — anyone with the machine can inspect the code/localStorage. It stops casual use, not a determined user. The cloud-synced teacher hash is for convenience across devices, not security.
 
 ## Next steps
-1. Test the login gate, splash, welcome animation, and update popup in the app (browser or `npm start`). Auth logic is runtime-tested via a stubbed DOM (all assertions pass, including cloud-hash load and role permissions); the UI itself has not been exercised in Electron yet. Theme, fullscreen, and opaque splash are verified only by inspecting the built `app.asar`, not visually.
+1. Test the login gate, splash, welcome animation, and update popup in the app (browser or `npm start`). Auth logic is runtime-tested via a stubbed DOM (all assertions pass, including cloud-hash load and role permissions); the UI itself has not been exercised in Electron yet. Theme, maximized launch, and opaque splash are verified only by inspecting the built `app.asar`, not visually.
 2. Redeploy the Google Apps Script as a NEW version so the `Auth` sheet is live, then confirm the teacher hash syncs between two devices.
 3. Kiosk mode was dropped by the user ("don't worry about kiosk mode").
 4. Publishing flow: `npm version patch --no-git-tag-version` → commit/push → `node scripts/publisher.js`. Latest release is `v1.0.3`; these features are not yet in a release.
