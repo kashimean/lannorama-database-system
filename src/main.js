@@ -10,6 +10,7 @@ function createWindow() {
     minHeight: 650,
     title: "Lannorama Database System",
     backgroundColor: '#1a0a0c',
+    icon: path.join(__dirname, 'assets', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
