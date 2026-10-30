@@ -237,6 +237,8 @@ main {
 .stat-icon.amber { background: var(--warning-bg); color: var(--warning); }
 .stat-icon.emerald { background: var(--success-bg); color: var(--success); }
 .stat-icon.cyan { background: rgba(6, 182, 212, 0.15); color: var(--accent); }
+.stat-icon.gold { background: var(--warning-bg); color: var(--accent); }
+.stat-icon.danger { background: var(--danger-bg); color: var(--danger); }
 
 /* Card Panels & Forms */
 .panel {
@@ -480,6 +482,17 @@ tr:hover td {
   color: var(--danger);
 }
 
+.badge-due-today {
+  background-color: var(--warning-bg);
+  color: var(--accent);
+}
+
+.badge-blacklist {
+  background-color: var(--danger-bg);
+  color: var(--danger);
+  border: 1px solid var(--danger);
+}
+
 .badge-returned {
   background-color: var(--success-bg);
   color: var(--success);
@@ -488,6 +501,84 @@ tr:hover td {
 .badge-class {
   background-color: rgba(255, 255, 255, 0.08);
   color: var(--text-muted);
+}
+
+/* Mini calendar (click a day to set the return date) */
+.mini-calendar {
+  margin-top: 10px;
+  padding: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  max-width: 320px;
+}
+
+.mini-cal-head {
+  font-weight: 700;
+  font-size: 0.9rem;
+  margin-bottom: 8px;
+  color: var(--text-main);
+}
+
+.mini-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.mini-cal-dow {
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--text-sub);
+  font-weight: 700;
+}
+
+.mini-cal-cell {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  padding: 5px 0;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.mini-cal-cell.empty { cursor: default; }
+.mini-cal-cell.weekend { background: rgba(198, 1, 31, 0.12); color: var(--text-sub); }
+.mini-cal-cell.past { opacity: 0.45; }
+.mini-cal-cell.today { border-color: var(--accent); color: var(--accent); }
+.mini-cal-cell.selected {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+.mini-cal-cell:hover:not(.empty) { background: var(--bg-card-hover); }
+
+.mini-cal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 0.75rem;
+  color: var(--text-sub);
+}
+
+.mini-cal-nav {
+  background: var(--bg-card-hover);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-main);
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.weekend-hint {
+  margin-top: 8px;
+  font-size: 0.8rem;
+  color: var(--accent);
+  min-height: 1.2em;
 }
 
 /* Stock Bar */

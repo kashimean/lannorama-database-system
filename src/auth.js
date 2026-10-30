@@ -1,14 +1,28 @@
-// Auth layer: splash, login gate, welcome animation, developer console.
-// Runs in the renderer (browser context).
+// Auth layer: splash, login gate (access code + password), welcome animation,
+// developer console, and role/level permissions.
 //
-// ADMIN_HASH is your "set in stone" password, stored as a SHA-256 hash only.
-// Generate your own:  node scripts/hash.js "your password"
-// The teacher password is set from the developer console, stored hashed, and
-// mirrored to the cloud Auth sheet so it syncs across devices.
+// Levels: developer > staff > ta
+//   developer — everything, including changing the Apps Script link
+//   staff     — checkout, add equipment, roster, blacklist, settings (sync/updater,
+//               but the Drive link is read-only), updater
+//   ta        — checkout only
+//
+// Developer hash is hardcoded (your "set in stone" password). Staff and TA codes
+// are created in the Developer Console and stored in the cloud Users sheet.
+// Generate a hash:  node scripts/hash.js "your password"
 
 const ADMIN_HASH = '9212e5e6ef4106525be27ac4fcde2db1aa65f4e706eb469cea7f0baec27dcc96'; // password: 2033
+const ADMIN_CODE = 'DEV';
 const ADMIN_NAME = 'Developer';
-const DEFAULT_TEACHER_NAME = 'Mr. Lanning';
+
+const RANK = { ta: 1, staff: 2, developer: 3 };
+
+// Tabs visible per level (a level sees its own tier plus everything below it).
+const LEVEL_TABS = {
+    ta: ['checkout'],
+    staff: ['checkout', 'active-checkouts', 'roster', 'blacklist', 'inventory', 'settings'],
+    developer: null // null = all tabs
+};
 
 async function sha256(text) {
     const data = new TextEncoder().encode(text);
@@ -18,52 +32,27 @@ async function sha256(text) {
 
 function getAuth() {
     const raw = localStorage.getItem('lds_auth');
-    if (!raw) return { teacherHash: null, teacherName: DEFAULT_TEACHER_NAME };
+    if (!raw) return { teacherHash: null, teacherName: 'Mr. Lanning' };
     try {
         const a = JSON.parse(raw);
-        return { teacherHash: a.teacherHash || null, teacherName: a.teacherName || DEFAULT_TEACHER_NAME };
+        return { teacherHash: a.teacherHash || null, teacherName: a.teacherName || 'Mr. Lanning' };
     } catch (e) {
-        return { teacherHash: null, teacherName: DEFAULT_TEACHER_NAME };
+        return { teacherHash: null, teacherName: 'Mr. Lanning' };
     }
 }
 
 function saveAuth(auth) {
-    // Only the teacher hash and display name persist. The role is session-only,
-    // so the app always asks for a password on launch.
+    // Only the display name and the legacy teacher hash persist. The session user
+    // is held in memory only, so the app asks for a code + password on every launch.
     localStorage.setItem('lds_auth', JSON.stringify({
         teacherHash: auth.teacherHash,
-        teacherName: auth.teacherName || DEFAULT_TEACHER_NAME
+        teacherName: auth.teacherName || 'Mr. Lanning'
     }));
 }
 
-let sessionRole = null;
+let sessionUser = null;
 
-async function attemptLogin(password) {
-    const hash = await sha256(password);
-
-    if (hash === ADMIN_HASH) {
-        sessionRole = 'admin';
-        return 'admin';
-    }
-
-    const auth = getAuth();
-    if (auth.teacherHash && hash === auth.teacherHash) {
-        sessionRole = 'teacher';
-        return 'teacher';
-    }
-
-    return null;
-}
-
-async function setTeacherPassword(password, name) {
-    const auth = getAuth();
-    auth.teacherHash = await sha256(password);
-    if (name) auth.teacherName = name;
-    saveAuth(auth);
-    return auth;
-}
-
-// Pull the teacher hash/name from the cloud Auth sheet (best effort).
+// Pull the teacher hash/name and the access codes from the cloud (best effort).
 async function loadCloudAuth() {
     const url = (typeof settings !== 'undefined' && settings) ? settings.webAppUrl : '';
     if (!url || !navigator.onLine) return getAuth();
@@ -72,6 +61,7 @@ async function loadCloudAuth() {
         const res = await fetch(url);
         if (!res.ok) return getAuth();
         const cloud = await res.json();
+
         const rows = cloud && Array.isArray(cloud.auth) ? cloud.auth : [];
         const row = rows.find(r => String(r.key) === 'teacherHash');
         if (row && row.value) {
@@ -79,62 +69,136 @@ async function loadCloudAuth() {
             auth.teacherHash = String(row.value);
             saveAuth(auth);
         }
+
+        if (cloud && Array.isArray(cloud.users) && typeof users !== 'undefined' && typeof normalizeRow === 'function') {
+            users = cloud.users.map((item, idx) => normalizeRow(item, 'user', idx)).filter(u => u.code);
+        }
     } catch (e) {
-        // Offline or unreachable: keep the local hash.
+        // Offline or unreachable: keep the local values.
     }
 
     return getAuth();
 }
 
-function logout() {
-    sessionRole = null;
+function userList() {
+    // Local copy first, then merge the cloud Users sheet.
+    const local = (typeof users !== 'undefined' && Array.isArray(users)) ? users : [];
+    const merged = new Map();
+    for (const u of local) if (u && u.code) merged.set(String(u.code).toUpperCase(), u);
+    merged.set(ADMIN_CODE, { id: 'us-dev', code: ADMIN_CODE, name: ADMIN_NAME, level: 'developer', passwordHash: ADMIN_HASH });
+    return Array.from(merged.values());
+}
+
+async function attemptLogin(code, password) {
+    const c = String(code || ADMIN_CODE).trim().toUpperCase();
+    const hash = await sha256(password);
+
+    const user = userList().find(u => String(u.code).toUpperCase() === c);
+    if (!user) return null;
+
+    // Developer always uses the hardcoded hash.
+    if (user.level === 'developer' && user.code === ADMIN_CODE) {
+        if (hash !== ADMIN_HASH) return null;
+        sessionUser = user;
+        return user;
+    }
+
+    if (user.passwordHash && hash === user.passwordHash) {
+        sessionUser = user;
+        return user;
+    }
+
+    // Backwards compatibility with the old single teacher password.
+    const auth = getAuth();
+    if (auth.teacherHash && hash === auth.teacherHash) {
+        sessionUser = { id: user.id, code: user.code, name: user.name, level: 'staff', passwordHash: auth.teacherHash };
+        return sessionUser;
+    }
+
+    return null;
+}
+
+async function addOrUpdateUser(code, name, level, password) {
+    const c = String(code || '').trim().toUpperCase();
+    if (!c) return null;
+
+    const existing = (typeof users !== 'undefined' ? users : []).find(u => String(u.code).toUpperCase() === c);
+    const record = existing || {
+        id: 'us-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+        code: c,
+        name: name || c,
+        level: level || 'ta',
+        passwordHash: ''
+    };
+
+    if (name) record.name = name;
+    if (level) record.level = level;
+    if (password) record.passwordHash = await sha256(password);
+
+    if (typeof queueChange === 'function') queueChange('user', record);
+    return record;
 }
 
 function currentRole() {
-    return sessionRole;
+    return sessionUser ? sessionUser.level : null;
 }
 
-function displayNameFor(role) {
-    return role === 'admin' ? ADMIN_NAME : (getAuth().teacherName || DEFAULT_TEACHER_NAME);
+function currentUser() {
+    return sessionUser;
 }
 
-// Teacher sees these tabs; inside Settings only panels marked data-teacher-access.
-const TEACHER_TABS = ['checkout', 'active-checkouts', 'roster', 'inventory', 'settings'];
+function displayNameFor(userOrRole) {
+    const u = typeof userOrRole === 'object' ? userOrRole : null;
+    if (u) return u.name || u.code;
+    if (userOrRole === 'admin' || userOrRole === 'developer') return ADMIN_NAME;
+    return getAuth().teacherName || 'Mr. Lanning';
+}
 
-function applyRolePermissions(role) {
+function can(level) {
+    const cur = currentRole();
+    if (!cur) return false;
+    return RANK[cur] >= RANK[level];
+}
+
+function applyRolePermissions(user) {
+    const level = typeof user === 'object' ? user.level : user;
+
+    // Tabs
+    const allowed = LEVEL_TABS[level];
     document.querySelectorAll('.nav-item').forEach(item => {
         const tab = item.dataset.tab;
-        if (role === 'teacher') {
-            item.style.display = TEACHER_TABS.includes(tab) ? '' : 'none';
-        } else {
-            item.style.display = '';
-        }
+        if (!allowed) { item.style.display = ''; return; }
+        item.style.display = allowed.includes(tab) ? '' : 'none';
     });
 
-    document.querySelectorAll('#tab-settings .panel').forEach(panel => {
-        if (role === 'teacher') {
-            panel.style.display = panel.dataset.teacherAccess ? '' : 'none';
-        } else {
-            panel.style.display = '';
-        }
+    // Panels: anything marked data-min-role is hidden below that level
+    document.querySelectorAll('[data-min-role]').forEach(el => {
+        el.style.display = RANK[level] >= RANK[el.dataset.minRole] ? '' : 'none';
     });
 
-    const devPanel = document.getElementById('devConsole');
-    if (devPanel) devPanel.style.display = role === 'admin' ? '' : 'none';
+    // Drive link is developer-only; staff can sync but not change it
+    const urlInput = document.getElementById('googleWebAppUrlInput');
+    if (urlInput) {
+        urlInput.disabled = level !== 'developer';
+        urlInput.title = level === 'developer' ? '' : 'Read-only — only the Developer can change the Drive link';
+    }
 
     const roleBadge = document.getElementById('roleBadge');
-    if (roleBadge) roleBadge.textContent = role === 'admin' ? 'Developer' : 'Teacher';
+    if (roleBadge) roleBadge.textContent = displayNameFor(user);
 
     const signOut = document.getElementById('btnLogout');
     if (signOut) signOut.style.display = '';
+
+    const devPanel = document.getElementById('devConsole');
+    if (devPanel) devPanel.style.display = level === 'developer' ? '' : 'none';
 }
 
-function showWelcome(role) {
+function showWelcome(user) {
     const flash = document.getElementById('welcomeFlash');
     const text = document.getElementById('welcomeText');
     if (!flash || !text) return;
 
-    text.textContent = `Welcome, ${displayNameFor(role)}`;
+    text.textContent = `Welcome, ${displayNameFor(user)}`;
     flash.style.display = 'flex';
     flash.classList.remove('fade-out');
     void flash.offsetWidth; // restart the animation
@@ -169,6 +233,7 @@ function showSplash(ms, then) {
 function showLoginGate(onSuccess) {
     const gate = document.getElementById('loginGate');
     const app = document.getElementById('appContainer');
+    const codeInput = document.getElementById('loginCode');
     const input = document.getElementById('loginPassword');
     const msg = document.getElementById('loginMessage');
 
@@ -181,21 +246,26 @@ function showLoginGate(onSuccess) {
         const pw = input.value;
         if (!pw) { msg.textContent = 'Enter a password.'; return; }
 
-        const role = await attemptLogin(pw);
-        if (!role) {
-            msg.textContent = 'Incorrect password.';
+        const user = await attemptLogin(codeInput ? codeInput.value : ADMIN_CODE, pw);
+        if (!user) {
+            msg.textContent = 'Unknown code or incorrect password.';
             input.select();
             return;
         }
 
         gate.style.display = 'none';
         app.style.display = '';
-        applyRolePermissions(role);
-        showWelcome(role);
-        if (onSuccess) onSuccess(role);
+        applyRolePermissions(user);
+        showWelcome(user);
+        if (onSuccess) onSuccess(user);
     };
 
     document.getElementById('loginSubmit').addEventListener('click', submit);
     input.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
-    input.focus();
+    if (codeInput) codeInput.addEventListener('keydown', e => { if (e.key === 'Enter') input.focus(); });
+    if (codeInput) codeInput.focus();
+}
+
+function logout() {
+    sessionUser = null;
 }

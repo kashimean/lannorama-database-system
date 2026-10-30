@@ -40,7 +40,8 @@
         <div class="login-card">
             <img class="login-logo" src="assets/icon.png" alt="Lannorama logo">
             <div class="login-title">Lannorama Database System</div>
-            <div class="login-sub">Locked — enter password to continue</div>
+            <div class="login-sub">Locked — enter access code and password</div>
+            <input type="text" id="loginCode" class="login-input" placeholder="Access code (e.g. DEV)" autocomplete="off">
             <input type="password" id="loginPassword" class="login-input" placeholder="Password" autocomplete="off">
             <div class="login-message" id="loginMessage"></div>
             <button class="btn btn-primary" id="loginSubmit">Unlock</button>
@@ -86,6 +87,10 @@
                 <span>🎓</span>
                 <span>Students Roster</span>
             </a>
+            <a class="nav-item" data-tab="blacklist" data-min-role="staff">
+                <span>🚫</span>
+                <span>Blacklist</span>
+            </a>
             <a class="nav-item" data-tab="settings">
                 <span>⚙️</span>
                 <span>Cloud & Settings</span>
@@ -109,10 +114,24 @@
                     </div>
                     <div class="stat-card">
                         <div class="stat-info">
+                            <h4>Due Today</h4>
+                            <div class="value" id="statDueToday">0</div>
+                        </div>
+                        <div class="stat-icon gold">📅</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-info">
                             <h4>Overdue Items</h4>
                             <div class="value" id="statOverdue">0</div>
                         </div>
                         <div class="stat-icon amber">⚠️</div>
+                    </div>
+                    <div class="stat-card" data-min-role="staff">
+                        <div class="stat-info">
+                            <h4>Blacklisted</h4>
+                            <div class="value" id="statBlacklisted">0</div>
+                        </div>
+                        <div class="stat-icon danger">🚫</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-info">
@@ -173,6 +192,12 @@
                             <div class="form-group">
                                 <label for="returnDateInput">Expected Return Date *</label>
                                 <input type="date" id="returnDateInput" required>
+                                <div class="mini-calendar" id="miniCalendar"></div>
+                                <div class="weekend-hint" id="weekendHint"></div>
+                                <label style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:0.85rem;color:var(--text-muted);">
+                                    <input type="checkbox" id="skipWeekends" checked>
+                                    Skip weekends (Friday returns land on the next Monday)
+                                </label>
                                 <div class="preset-buttons">
                                     <button type="button" class="preset-btn" id="presetToday">End of Today</button>
                                     <button type="button" class="preset-btn" id="presetTomorrow">Tomorrow</button>
@@ -307,9 +332,62 @@
                 </div>
             </div>
 
+            <!-- TAB 6: BLACKLIST -->
+            <div id="tab-blacklist" class="tab-content" data-min-role="staff">
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">
+                            <span>🚫</span> Student Blacklist
+                        </div>
+                        <div style="display:flex;gap:12px;">
+                            <input type="text" id="searchBlacklistInput" placeholder="🔍 Search blacklist..." style="width:220px;">
+                        </div>
+                    </div>
+
+                    <p style="color:var(--text-muted);font-size:0.92rem;margin-bottom:18px;">
+                        Blacklisted students cannot check out equipment. Add an entry for behavior issues or overdue items, and lift it when the problem is resolved.
+                    </p>
+
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="blacklistStudentInput">Student name</label>
+                            <input type="text" id="blacklistStudentInput" list="studentList" placeholder="Student name" autocomplete="off">
+                        </div>
+                        <div class="form-group">
+                            <label for="blacklistReasonInput">Reason</label>
+                            <input type="text" id="blacklistReasonInput" placeholder="e.g. Equipment damaged / item overdue">
+                        </div>
+                    </div>
+
+                    <div style="margin-top:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                        <button class="btn btn-danger" id="btnAddBlacklist">🚫 Add to Blacklist</button>
+                        <label style="display:flex;gap:8px;align-items:center;color:var(--text-muted);font-size:0.9rem;">
+                            <input type="checkbox" id="autoBlacklistOverdue">
+                            Auto-blacklist students with overdue items
+                        </label>
+                    </div>
+
+                    <div class="table-container" style="margin-top:20px;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Student</th>
+                                    <th>Reason</th>
+                                    <th>Added By</th>
+                                    <th>Added</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="blacklistTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
             <!-- TAB 5: SETTINGS & CLOUD SYNC -->
             <div id="tab-settings" class="tab-content">
-                <div class="panel">
+                <div class="panel" data-min-role="staff">
                     <div class="panel-header">
                         <div class="panel-title">
                             <span>☁️</span> Google Sheets Live Cloud Storage Integration
@@ -338,7 +416,7 @@
                 </div>
 
                 <!-- OFFLINE QUEUE PANEL -->
-                <div class="panel">
+                <div class="panel" data-min-role="staff">
                     <div class="panel-header">
                         <div class="panel-title">
                             <span>📡</span> Offline Queue & Sync Status
@@ -385,8 +463,8 @@
                     </div>
                 </div>
 
-                <!-- UPDATER PANEL (teacher may see this one panel in Settings) -->
-                <div class="panel" data-teacher-access="1">
+                <!-- UPDATER PANEL (staff and above) -->
+                <div class="panel" data-teacher-access="1" data-min-role="staff">
                     <div class="panel-header">
                         <div class="panel-title">
                             <span>⬆️</span> Auto-Updater
@@ -407,13 +485,13 @@
                     </div>
                 </div>
 
-                <!-- DEVELOPER CONSOLE (admin only) -->
-                <div class="panel" id="devConsole" style="display:none;">
+                <!-- DEVELOPER CONSOLE (developer only) -->
+                <div class="panel" id="devConsole" data-min-role="developer" style="display:none;">
                     <div class="panel-header">
                         <div class="panel-title">
                             <span>🔑</span> Developer Console
                         </div>
-                        <span class="badge-pill badge-class">Admin</span>
+                        <span class="badge-pill badge-class">Developer</span>
                     </div>
 
                     <p style="color: var(--text-muted); font-size: 0.92rem; margin-bottom: 18px;">
@@ -426,6 +504,42 @@
                     <label style="font-weight:600; display:block; margin:14px 0 6px;">Teacher password</label>
                     <input type="password" id="teacherPasswordInput" class="input" placeholder="New password for Mr. Lanning">
                     <button class="btn btn-primary" id="btnSetTeacherPassword" style="margin-top:10px;">Set Teacher Password</button>
+
+                    <div style="margin-top:22px;border-top:1px solid var(--border-color);padding-top:18px;">
+                        <div style="font-weight:700;margin-bottom:10px;">Access codes (Staff / TA)</div>
+                        <p style="color:var(--text-muted);font-size:0.9rem;margin-bottom:12px;">
+                            Staff can check out, add equipment, view roster/blacklist and use sync + updater. TAs can only check out. Codes are stored in the cloud <code>Users</code> sheet.
+                        </p>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="userCodeInput">Access code</label>
+                                <input type="text" id="userCodeInput" class="input" placeholder="e.g. TA1">
+                            </div>
+                            <div class="form-group">
+                                <label for="userNameInput">Display name</label>
+                                <input type="text" id="userNameInput" class="input" placeholder="e.g. Ava (TA)">
+                            </div>
+                            <div class="form-group">
+                                <label for="userLevelSelect">Level</label>
+                                <select id="userLevelSelect">
+                                    <option value="staff">Staff</option>
+                                    <option value="ta">TA</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="userPasswordInput">Password</label>
+                                <input type="password" id="userPasswordInput" class="input" placeholder="Password for this code">
+                            </div>
+                        </div>
+                        <button class="btn btn-primary" id="btnSaveUser" style="margin-top:10px;">Create / Update Code</button>
+
+                        <div class="table-container" style="margin-top:18px;">
+                            <table>
+                                <thead><tr><th>Code</th><th>Name</th><th>Level</th><th>Actions</th></tr></thead>
+                                <tbody id="userTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Google Apps Script Setup Instructions Panel -->
@@ -438,7 +552,7 @@
 
                     <div style="font-size: 0.9rem; color: var(--text-muted); line-height: 1.6;">
                         <ol style="margin-left: 20px; display: flex; flex-direction: column; gap: 10px;">
-                            <li>Open your Google Sheet. Ensure it has 3 tabs named exactly: <strong><code>Equipment</code></strong>, <strong><code>Students</code></strong>, and <strong><code>Checkouts</code></strong>.</li>
+                            <li>Open your Google Sheet. Ensure it has tabs named exactly: <strong><code>Equipment</code></strong>, <strong><code>Students</code></strong>, <strong><code>Checkouts</code></strong>, <strong><code>Auth</code></strong>, <strong><code>Users</code></strong>, and <strong><code>Blacklist</code></strong> (the script creates missing tabs automatically on first write).</li>
                             <li>Click on <strong>Extensions &gt; Apps Script</strong> in the top Google Sheet menu bar.</li>
                             <li>Delete any default code in the script editor, and paste the copyable Google Apps Script code below.</li>
                             <li>Click <strong>Deploy &gt; New deployment</strong> (top right). Select type <strong>Web app</strong>.</li>
