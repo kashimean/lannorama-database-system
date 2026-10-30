@@ -18,6 +18,10 @@ function setState(status, message) {
 function initUpdater(win) {
     winRef = win;
 
+    // Register IPC handlers first so the renderer's getUpdaterState() call
+    // never rejects in dev mode (the handlers were previously skipped).
+    ipcMain.handle('updater:state', () => updateState);
+
     // The updater only works in a packaged/installed build
     if (!app.isPackaged) {
         setState('dev', 'Updater is inactive while running from source. Build the EXE to enable auto-update.');
@@ -51,6 +55,7 @@ function initUpdater(win) {
     });
 
     ipcMain.handle('updater:check', async () => {
+        if (!app.isPackaged) return null;
         try {
             return await autoUpdater.checkForUpdates();
         } catch (err) {

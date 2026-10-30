@@ -718,13 +718,15 @@ presetTomorrow.addEventListener('click', () => setReturnDateDays(1));
 preset3Days.addEventListener('click', () => setReturnDateDays(3));
 preset1Week.addEventListener('click', () => setReturnDateDays(7));
 
-// Default date to tomorrow (weekend-aware)
-setReturnDateDays(1);
-
 // --- MINI CALENDAR (click a day to set the return date) ---
+// Declared before setReturnDateDays() runs at load time: a const in its
+// temporal dead zone throws ReferenceError and kills the whole renderer.
 const miniCalendar = document.getElementById('miniCalendar');
 const weekendHint = document.getElementById('weekendHint');
 let calendarMonth = new Date();
+
+// Default date to tomorrow (weekend-aware)
+setReturnDateDays(1);
 
 function renderMiniCalendar() {
     if (!miniCalendar) return;
