@@ -3,9 +3,9 @@
 Project: `C:/Users/Colton/equipment-tracker`
 
 ## Verified state (checked, not assumed)
-- Git: branch `main`, HEAD `8a40add`, remote `https://github.com/kashimean/lannorama-database-system.git`, in sync (0 ahead / 0 behind), clean tree.
+- Git: branch `main`, HEAD `62b85b0`, remote `https://github.com/kashimean/lannorama-database-system.git`, in sync (0 ahead / 0 behind), clean tree.
 - Token: classic PAT in `.env` (gitignored, confirmed not in any tracked file). Fine-grained token could NOT create releases (403); classic can.
-- Releases: **`v1.0.4` is latest** (published at the user's request). Assets confirmed live: `Lannorama-Database-System-Setup-1.0.4.exe` (77,582,535 bytes), `.exe.blockmap` (81,958), `latest.yml` (378). Atom feed returns 200.
+- Releases: **`v1.0.5` is latest** and confirmed live — Atom feed 200, `latest.yml` resolves 200 with `version: 1.0.5`, size 77,695,351, sha512 matching the local `dist` build. Assets: `Lannorama-Database-System-Setup-1.0.5.exe`, `.exe.blockmap` (82,049), `latest.yml` (378).
 - Root cause of the updater error: `latest.yml` was missing from the v1.0.1 release assets (stale 1.0.0 files were uploaded because `dist/` was not cleaned). Fixed by uploading the missing assets, deleting stale ones, and making `scripts/publisher.js` clean `dist/` before building.
 - Updater reads **release assets via the Atom feed**, never repo files — adding `latest.yml` to git does nothing.
 - `win.signAndEditExecutable: false` in package.json is required here: electron-builder's winCodeSign cache extraction fails on this machine because symlink creation needs admin/Developer Mode. Consequence: icon is not embedded in the app EXE (installer/shortcuts still use `buildResources/icon.ico`).
@@ -17,6 +17,11 @@ Project: `C:/Users/Colton/equipment-tracker`
   - Caveat: because `win.signAndEditExecutable` is false, the `.exe` file itself still shows the default Electron icon in Explorer; installer/shortcuts use `buildResources/icon.ico`.
 - Google Sheets sync confirmed working by user. Offline-first queue: `queueChange` → `flushQueue` → `verifyQueue` (queue clears only when changes are confirmed present in the sheet). Sync Activity Log + Verify button.
 - Apps Script must be redeployed as a NEW version for the `/exec` URL to change.
+
+- **Real bug fixed (commit `03a8329`):** the app froze on the loading screen. `setReturnDateDays(1)` runs at load time and touches `miniCalendar`, but `const miniCalendar` was declared ~20 lines later → `Uncaught ReferenceError: Cannot access 'miniCalendar' before initialization` (temporal dead zone). The renderer aborted before `startAuth()`, so the splash (visible by default in CSS) never hid. Moved the `miniCalendar`/`weekendHint`/`calendarMonth` declarations above the date presets. Verified fixed with `npx electron . --enable-logging=stderr` — no console errors.
+- Second fix in the same commit: `initUpdater()` returned early in dev mode before registering `ipcMain.handle('updater:state')`, so the renderer's `getUpdaterState()` rejected with "No handler registered". Handlers are now registered before the `isPackaged` check and `updater:check` returns null in dev mode.
+- Debug method that found it: `npx electron . --enable-logging=stderr` prints renderer console errors to stdout — use this whenever the UI hangs.
+- `apps-script.gs` is the copy-paste Apps Script code (same as `APPS_SCRIPT_TEMPLATE`), committed for convenience.
 
 ## Auth / lock mode (just added)
 - `src/auth.js` (browser script, loaded before renderer.js in index.html).
@@ -56,7 +61,7 @@ Project: `C:/Users/Colton/equipment-tracker`
 - All four JS files pass `node --check`. Every new id referenced by renderer.js exists in index.html (verified by count). Build rebuilt into `dist` and the features are present in `app.asar` — but nothing here has been exercised visually in Electron.
 
 ## Next steps
-1. Test the login gate (code + password), splash, welcome animation, update popup, mini calendar, Due Today card, blacklist tab, and level gating in the app (browser or `npm start`). Auth logic is runtime-tested via a stubbed DOM (all assertions pass, including cloud-hash load and role permissions); the UI itself has not been exercised in Electron yet. Theme, maximized launch, opaque splash, icon, and the new features are verified only by inspecting the built `app.asar`, not visually.
-2. Redeploy the Google Apps Script as a NEW version so the `Auth`, `Users` and `Blacklist` sheets are live, then confirm the teacher hash and access codes sync between two devices.
+1. **The user must redeploy the Apps Script as a NEW version** (Deploy → Manage deployments → pencil → New version, Access must stay **Anyone**) or the `Auth`/`Users`/`Blacklist` sheets do nothing — the `/exec` URL serves the snapshot from deploy time. Verify by opening the `/exec` URL in a browser and confirming the JSON contains `auth`, `users`, `blacklist` keys.
+2. Test the login gate (code + password), splash, welcome animation, update popup, mini calendar, Due Today card, blacklist tab, and level gating in the app. The app is confirmed to start and run (renderer no longer throws); the UI has not been exercised end-to-end visually in Electron yet. Theme, maximized launch, opaque splash, and icon are verified by inspecting the built `app.asar`, not visually.
 3. Kiosk mode was dropped by the user ("don't worry about kiosk mode").
-4. Publishing flow: `npm version patch --no-git-tag-version` → commit/push → `node scripts/publisher.js`. Latest release is `v1.0.4`; the icon change and everything in the section above are NOT in a release yet, so the next publish needs `1.0.5`.
+4. Publishing flow: `npm version patch --no-git-tag-version` → commit/push → `node scripts/publisher.js`. Latest release is `v1.0.5`; the next publish needs `1.0.6`.
