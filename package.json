@@ -1,6 +1,6 @@
 {
   "name": "lannorama-database-system",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Lannorama Database System - Digital Media equipment checkout tracker",
   "author": "Lannorama",
   "main": "src/main.js",
