@@ -4,7 +4,8 @@
 const APPS_SCRIPT_TEMPLATE = `const HEADERS = {
   Equipment: ["id", "name", "category", "stock"],
   Students: ["id", "name", "classType"],
-  Checkouts: ["id", "studentName", "classType", "equipmentId", "equipmentName", "accessories", "checkoutDate", "returnDate", "status"]
+  Checkouts: ["id", "studentName", "classType", "equipmentId", "equipmentName", "accessories", "checkoutDate", "returnDate", "status"],
+  Auth: ["id", "key", "value"]
 };
 
 function doGet(e) {
@@ -12,7 +13,8 @@ function doGet(e) {
   return ContentService.createTextOutput(JSON.stringify({
     equipment: readSheet(ss, "Equipment"),
     students: readSheet(ss, "Students"),
-    checkouts: readSheet(ss, "Checkouts")
+    checkouts: readSheet(ss, "Checkouts"),
+    auth: readSheet(ss, "Auth")
   })).setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -38,6 +40,7 @@ function sheetForAction(type) {
   if (type === "checkout") return "Checkouts";
   if (type === "student" || type === "delete_student") return "Students";
   if (type === "equipment" || type === "delete_equipment") return "Equipment";
+  if (type === "auth") return "Auth";
   return null;
 }
 
@@ -401,6 +404,7 @@ async function verifyQueue(showToasts = true) {
         const sheetFor = (type) => {
             if (type === 'checkout') return cloud.checkouts;
             if (type === 'student' || type === 'delete_student') return cloud.students;
+            if (type === 'auth') return cloud.auth;
             return cloud.equipment;
         };
 
@@ -476,6 +480,14 @@ async function syncFromCloud(showToasts = true) {
         }
         if (cloudData.checkouts && Array.isArray(cloudData.checkouts)) {
             checkouts = cloudData.checkouts.map((item, idx) => normalizeRow(item, 'checkout', idx));
+        }
+        if (cloudData.auth && Array.isArray(cloudData.auth)) {
+            const row = cloudData.auth.find(r => String(r.key) === 'teacherHash');
+            if (row && row.value) {
+                const auth = getAuth();
+                auth.teacherHash = String(row.value);
+                saveAuth(auth);
+            }
         }
 
         // Put unsynced local changes back on top of the cloud snapshot
@@ -1094,6 +1106,18 @@ btnVerifySync.addEventListener('click', () => {
 });
 
 // --- AUTO-UPDATER UI ---
+let updatePopupShown = false;
+
+function showUpdatePopup(state) {
+    const popup = document.getElementById('updatePopup');
+    const body = document.getElementById('updatePopupBody');
+    if (!popup || !body) return;
+
+    // state.message already reads "Update available: vX (you are on vY)"
+    body.textContent = state.message || 'An update is available.';
+    popup.style.display = 'flex';
+}
+
 function renderUpdaterState(state) {
     if (!updaterStatusText || !state) return;
 
@@ -1103,6 +1127,12 @@ function renderUpdaterState(state) {
 
     btnDownloadUpdate.disabled = state.status !== 'available';
     btnInstallUpdate.disabled = state.status !== 'downloaded';
+
+    // Notify on launch when an update is found
+    if (state.status === 'available' && !updatePopupShown) {
+        updatePopupShown = true;
+        showUpdatePopup(state);
+    }
 }
 
 if (window.electronAPI && window.electronAPI.getUpdaterState) {
@@ -1112,6 +1142,13 @@ if (window.electronAPI && window.electronAPI.getUpdaterState) {
     btnCheckUpdates.addEventListener('click', () => window.electronAPI.checkForUpdates());
     btnDownloadUpdate.addEventListener('click', () => window.electronAPI.downloadUpdate());
     btnInstallUpdate.addEventListener('click', () => window.electronAPI.installUpdate());
+
+    const popupDownload = document.getElementById('popupDownload');
+    const popupLater = document.getElementById('popupLater');
+    if (popupDownload) popupDownload.addEventListener('click', () => window.electronAPI.downloadUpdate());
+    if (popupLater) popupLater.addEventListener('click', () => {
+        document.getElementById('updatePopup').style.display = 'none';
+    });
 } else {
     updaterStatusText.textContent = 'Updater is only active in the packaged EXE (open in a browser or run "npm start" for dev mode).';
 }
@@ -1201,20 +1238,28 @@ renderQueueStatus();
 // --- AUTH / LOGIN GATE ---
 // The password is required on every launch: the role is kept in memory only,
 // so nothing is remembered between runs except the teacher password hash.
-function startAuth() {
-    showLoginGate(applyRolePermissions);
-
+async function startAuth() {
+    const nameInput = document.getElementById('teacherNameInput');
+    const pwInput = document.getElementById('teacherPasswordInput');
     const btnSet = document.getElementById('btnSetTeacherPassword');
     const btnOut = document.getElementById('btnLogout');
-    const input = document.getElementById('teacherPasswordInput');
+
+    // Pull the teacher hash from the cloud before the gate is shown, so a
+    // password set on another device works here. Falls back to local on failure.
+    const auth = await loadCloudAuth();
+    if (nameInput) nameInput.value = auth.teacherName || DEFAULT_TEACHER_NAME;
+
+    showSplash(1800, () => showLoginGate(applyRolePermissions));
 
     if (btnSet) {
         btnSet.addEventListener('click', async () => {
-            const pw = input.value.trim();
+            const pw = pwInput.value.trim();
             if (!pw) { showToast('Enter a password for the teacher.', 'error'); return; }
-            await setTeacherPassword(pw);
-            input.value = '';
-            showToast('Teacher password set.', 'success');
+            const saved = await setTeacherPassword(pw, nameInput ? nameInput.value.trim() : '');
+            pwInput.value = '';
+            // Mirror to the cloud Auth sheet (queued if offline)
+            queueChange('auth', { id: 'teacherHash', key: 'teacherHash', value: saved.teacherHash });
+            showToast('Teacher password set and queued for cloud sync.', 'success');
         });
     }
 

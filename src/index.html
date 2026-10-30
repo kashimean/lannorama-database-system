@@ -8,7 +8,33 @@
 </head>
 <body>
 
-    <!-- LOGIN GATE -->
+    <!-- SPLASH SCREEN -->
+    <div id="splashScreen" class="splash">
+        <div class="splash-inner">
+            <div class="splash-icon">📹</div>
+            <div class="splash-title">Lannorama</div>
+            <div class="splash-sub">Database System</div>
+            <div class="splash-bar"><span></span></div>
+        </div>
+    </div>
+
+    <!-- WELCOME FLASH (after login) -->
+    <div id="welcomeFlash" class="welcome-flash" style="display:none;">
+        <span id="welcomeText"></span>
+    </div>
+
+    <!-- UPDATE POPUP -->
+    <div id="updatePopup" class="update-popup" style="display:none;">
+        <div class="update-popup-card">
+            <div class="update-popup-title">⬆️ Update available</div>
+            <div class="update-popup-body" id="updatePopupBody"></div>
+            <div class="update-popup-actions">
+                <button class="btn btn-primary" id="popupDownload">⬇️ Download &amp; Install</button>
+                <button class="btn btn-secondary" id="popupLater">Later</button>
+            </div>
+        </div>
+    </div>
+
     <div id="loginGate" class="login-gate">
         <div class="login-card">
             <div class="login-title">Lannorama Database System</div>
@@ -392,7 +418,10 @@
                         Set Mr. Lanning's password here. It is stored as a SHA-256 hash, never as plain text, and only this console can change it.
                     </p>
 
-                    <label style="font-weight:600; display:block; margin-bottom:6px;">Teacher password</label>
+                    <label style="font-weight:600; display:block; margin-bottom:6px;">Teacher display name</label>
+                    <input type="text" id="teacherNameInput" class="input" placeholder="Mr. Lanning">
+
+                    <label style="font-weight:600; display:block; margin:14px 0 6px;">Teacher password</label>
                     <input type="password" id="teacherPasswordInput" class="input" placeholder="New password for Mr. Lanning">
                     <button class="btn btn-primary" id="btnSetTeacherPassword" style="margin-top:10px;">Set Teacher Password</button>
                 </div>

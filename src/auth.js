@@ -1,10 +1,14 @@
-// Auth layer: login gate + developer console. Runs in the renderer (browser context).
+// Auth layer: splash, login gate, welcome animation, developer console.
+// Runs in the renderer (browser context).
 //
 // ADMIN_HASH is your "set in stone" password, stored as a SHA-256 hash only.
 // Generate your own:  node scripts/hash.js "your password"
-// The teacher password is set from the developer console and stored hashed.
+// The teacher password is set from the developer console, stored hashed, and
+// mirrored to the cloud Auth sheet so it syncs across devices.
 
 const ADMIN_HASH = '9212e5e6ef4106525be27ac4fcde2db1aa65f4e706eb469cea7f0baec27dcc96'; // password: 2033
+const ADMIN_NAME = 'Developer';
+const DEFAULT_TEACHER_NAME = 'Mr. Lanning';
 
 async function sha256(text) {
     const data = new TextEncoder().encode(text);
@@ -14,14 +18,22 @@ async function sha256(text) {
 
 function getAuth() {
     const raw = localStorage.getItem('lds_auth');
-    if (!raw) return { teacherHash: null };
-    try { return { teacherHash: JSON.parse(raw).teacherHash || null }; } catch (e) { return { teacherHash: null }; }
+    if (!raw) return { teacherHash: null, teacherName: DEFAULT_TEACHER_NAME };
+    try {
+        const a = JSON.parse(raw);
+        return { teacherHash: a.teacherHash || null, teacherName: a.teacherName || DEFAULT_TEACHER_NAME };
+    } catch (e) {
+        return { teacherHash: null, teacherName: DEFAULT_TEACHER_NAME };
+    }
 }
 
 function saveAuth(auth) {
-    // Only the teacher password hash is persisted. The role is session-only,
+    // Only the teacher hash and display name persist. The role is session-only,
     // so the app always asks for a password on launch.
-    localStorage.setItem('lds_auth', JSON.stringify({ teacherHash: auth.teacherHash }));
+    localStorage.setItem('lds_auth', JSON.stringify({
+        teacherHash: auth.teacherHash,
+        teacherName: auth.teacherName || DEFAULT_TEACHER_NAME
+    }));
 }
 
 let sessionRole = null;
@@ -31,38 +43,62 @@ async function attemptLogin(password) {
 
     if (hash === ADMIN_HASH) {
         sessionRole = 'admin';
-        saveAuth(getAuth());
         return 'admin';
     }
 
     const auth = getAuth();
     if (auth.teacherHash && hash === auth.teacherHash) {
         sessionRole = 'teacher';
-        saveAuth(auth);
         return 'teacher';
     }
 
     return null;
 }
 
-async function setTeacherPassword(password) {
+async function setTeacherPassword(password, name) {
     const auth = getAuth();
     auth.teacherHash = await sha256(password);
+    if (name) auth.teacherName = name;
     saveAuth(auth);
-    return auth.teacherHash;
+    return auth;
+}
+
+// Pull the teacher hash/name from the cloud Auth sheet (best effort).
+async function loadCloudAuth() {
+    const url = (typeof settings !== 'undefined' && settings) ? settings.webAppUrl : '';
+    if (!url || !navigator.onLine) return getAuth();
+
+    try {
+        const res = await fetch(url);
+        if (!res.ok) return getAuth();
+        const cloud = await res.json();
+        const rows = cloud && Array.isArray(cloud.auth) ? cloud.auth : [];
+        const row = rows.find(r => String(r.key) === 'teacherHash');
+        if (row && row.value) {
+            const auth = getAuth();
+            auth.teacherHash = String(row.value);
+            saveAuth(auth);
+        }
+    } catch (e) {
+        // Offline or unreachable: keep the local hash.
+    }
+
+    return getAuth();
 }
 
 function logout() {
     sessionRole = null;
-    saveAuth(getAuth());
 }
 
 function currentRole() {
     return sessionRole;
 }
 
-// Permissions: teacher gets checkout, active checkouts, roster, inventory,
-// and Settings — but inside Settings only panels marked data-teacher-access.
+function displayNameFor(role) {
+    return role === 'admin' ? ADMIN_NAME : (getAuth().teacherName || DEFAULT_TEACHER_NAME);
+}
+
+// Teacher sees these tabs; inside Settings only panels marked data-teacher-access.
 const TEACHER_TABS = ['checkout', 'active-checkouts', 'roster', 'inventory', 'settings'];
 
 function applyRolePermissions(role) {
@@ -75,7 +111,6 @@ function applyRolePermissions(role) {
         }
     });
 
-    // Inside Settings, hide every panel the teacher is not allowed to see.
     document.querySelectorAll('#tab-settings .panel').forEach(panel => {
         if (role === 'teacher') {
             panel.style.display = panel.dataset.teacherAccess ? '' : 'none';
@@ -92,6 +127,36 @@ function applyRolePermissions(role) {
 
     const signOut = document.getElementById('btnLogout');
     if (signOut) signOut.style.display = '';
+}
+
+function showWelcome(role) {
+    const flash = document.getElementById('welcomeFlash');
+    const text = document.getElementById('welcomeText');
+    if (!flash || !text) return;
+
+    text.textContent = `Welcome, ${displayNameFor(role)}`;
+    flash.style.display = 'flex';
+    flash.classList.remove('fade-out');
+    void flash.offsetWidth; // restart the animation
+
+    setTimeout(() => {
+        flash.classList.add('fade-out');
+        setTimeout(() => { flash.style.display = 'none'; }, 600);
+    }, 1800);
+}
+
+function showSplash(ms, then) {
+    const splash = document.getElementById('splashScreen');
+    if (!splash) { if (then) then(); return; }
+
+    splash.style.display = 'flex';
+    setTimeout(() => {
+        splash.classList.add('fade-out');
+        setTimeout(() => {
+            splash.style.display = 'none';
+            if (then) then();
+        }, 500);
+    }, ms);
 }
 
 function showLoginGate(onSuccess) {
@@ -119,6 +184,7 @@ function showLoginGate(onSuccess) {
         gate.style.display = 'none';
         app.style.display = '';
         applyRolePermissions(role);
+        showWelcome(role);
         if (onSuccess) onSuccess(role);
     };
 
