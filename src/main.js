@@ -10,7 +10,6 @@ function createWindow() {
     minHeight: 650,
     title: "Lannorama Database System",
     backgroundColor: '#1a0a0c',
-    fullscreen: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -20,8 +19,8 @@ function createWindow() {
 
   win.loadFile('src/index.html');
 
-  // Start maximized/fullscreen; F11 toggles back to windowed if needed
-  win.setFullScreen(true);
+  // Launch maximized
+  win.maximize();
 
   // Optional: remove top menu bar for clean modern app look
   win.setMenuBarVisibility(false);
