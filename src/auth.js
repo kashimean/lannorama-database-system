@@ -147,13 +147,20 @@ function showWelcome(role) {
 
 function showSplash(ms, then) {
     const splash = document.getElementById('splashScreen');
+    const app = document.getElementById('appContainer');
+    const gate = document.getElementById('loginGate');
     if (!splash) { if (then) then(); return; }
+
+    // Cover everything while the splash is up, so nothing behind it is visible.
+    if (app) app.style.display = 'none';
+    if (gate) gate.style.display = 'none';
 
     splash.style.display = 'flex';
     setTimeout(() => {
         splash.classList.add('fade-out');
         setTimeout(() => {
             splash.style.display = 'none';
+            splash.classList.remove('fade-out');
             if (then) then();
         }, 500);
     }, ms);

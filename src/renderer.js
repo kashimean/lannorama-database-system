@@ -156,7 +156,9 @@ const DEFAULT_CHECKOUTS = [
 let equipment = JSON.parse(localStorage.getItem('media_tracker_equipment')) || DEFAULT_EQUIPMENT;
 let students = JSON.parse(localStorage.getItem('media_tracker_students')) || DEFAULT_STUDENTS;
 let checkouts = JSON.parse(localStorage.getItem('media_tracker_checkouts')) || DEFAULT_CHECKOUTS;
-let settings = JSON.parse(localStorage.getItem('media_tracker_settings')) || { webAppUrl: '' };
+const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwafWSa7a8TZMU3vihFUHEuyeEjfVIVUUYRv-doKix8wCymq5oNTWN77dxpoKVP70aL/exec';
+let settings = JSON.parse(localStorage.getItem('media_tracker_settings')) || { webAppUrl: DEFAULT_APPS_SCRIPT_URL };
+if (!settings.webAppUrl) settings.webAppUrl = DEFAULT_APPS_SCRIPT_URL;
 let pendingQueue = JSON.parse(localStorage.getItem('media_tracker_queue')) || [];
 let lastSync = localStorage.getItem('media_tracker_lastsync') || '';
 
