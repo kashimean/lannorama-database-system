@@ -611,6 +611,24 @@ async function flushQueue(showToasts = false) {
     return verifyQueue(showToasts);
 }
 
+// Apps Script returns HTML when the deployment is not readable by the caller
+// (Access is not "Anyone", or the URL is the edit URL instead of /exec). That
+// case used to be reported as "deployed version is older", which is wrong.
+async function readJsonResponse(res) {
+    const ct = String(res.headers.get('content-type') || '');
+    const text = await res.text();
+    if (ct.indexOf('json') === -1 || /^\s*<(!DOCTYPE|html)/i.test(text)) {
+        const err = new Error('The /exec URL returned an HTML page instead of JSON.');
+        err.htmlPage = true;
+        throw err;
+    }
+    return JSON.parse(text);
+}
+
+function logHtmlCause() {
+    logSync('Cause: the endpoint returned HTML, not JSON. Check that the deployment Access is "Anyone" (not "Anyone with access to the data") and that the URL ends in /exec — not the /edit URL.', 'warn');
+}
+
 // Check whether each queued action is present in the sheet. This is the only
 // trustworthy confirmation, since Apps Script POST responses are opaque in a browser.
 async function verifyQueue(showToasts = true) {
@@ -623,7 +641,7 @@ async function verifyQueue(showToasts = true) {
     try {
         const res = await fetch(settings.webAppUrl);
         if (!res.ok) throw new Error('bad response');
-        const cloud = await res.json();
+        const cloud = await readJsonResponse(res);
 
         const sheetFor = (type, data) => {
             if (type === 'assign_id') return cloud[(data && data.sheet ? String(data.sheet).toLowerCase() : 'students')] || [];
@@ -665,6 +683,13 @@ async function verifyQueue(showToasts = true) {
         if (showToasts) showToast(`${missing.length} change(s) did not reach the sheet — redeploy the Apps Script as a NEW version.`, 'error');
         return false;
     } catch (err) {
+        if (err.htmlPage) {
+            logSync(`Verify failed: ${err.message}`, 'err');
+            logHtmlCause();
+            setSyncStatus('Endpoint returned HTML — check Access is "Anyone"', false);
+            if (showToasts) showToast('The /exec URL is serving HTML. Set deployment Access to "Anyone" and use the /exec URL.', 'error');
+            return false;
+        }
         logSync(`Verify failed: ${err.message}`, 'err');
         setSyncStatus(`Offline — ${pendingQueue.length} change(s) queued`, false);
         return false;
@@ -1711,6 +1736,23 @@ btnVerifySync.addEventListener('click', () => {
     logSync('Manual verification requested.');
     verifyQueue(true);
 });
+
+// Entries that can never be confirmed (rows already deleted, names that no
+// longer exist) would otherwise sit in the queue forever and keep showing the
+// "not confirmed" error. Dropping them is safe: the sheet is the source of truth.
+const btnClearQueue = document.getElementById('btnClearQueue');
+if (btnClearQueue) {
+    btnClearQueue.addEventListener('click', () => {
+        if (pendingQueue.length === 0) { showToast('Queue is already empty.', 'info'); return; }
+        const count = pendingQueue.length;
+        pendingQueue = [];
+        saveData();
+        renderQueueStatus();
+        setSyncStatus('Queue cleared — re-sync to compare against the sheet', false);
+        logSync(`Dropped ${count} unconfirmable queue entry(ies).`, 'warn');
+        showToast(`Queue cleared (${count}). Local data now matches the sheet on the next sync.`, 'success');
+    });
+}
 
 // --- AUTO-UPDATER UI ---
 let updatePopupShown = false;
