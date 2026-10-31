@@ -3,7 +3,7 @@
 Project: `C:/Users/Colton/equipment-tracker`
 
 ## Verified state (checked, not assumed)
-- Git: branch `main`, HEAD `62b85b0`, remote `https://github.com/kashimean/lannorama-database-system.git`, in sync (0 ahead / 0 behind), clean tree.
+- Git: branch `main`, HEAD `f9fa1f5`, remote `https://github.com/kashimean/lannorama-database-system.git`, in sync (0 ahead / 0 behind), clean tree.
 - Token: classic PAT in `.env` (gitignored, confirmed not in any tracked file). Fine-grained token could NOT create releases (403); classic can.
 - Releases: **`v1.0.5` is latest** and confirmed live — Atom feed 200, `latest.yml` resolves 200 with `version: 1.0.5`, size 77,695,351, sha512 matching the local `dist` build. Assets: `Lannorama-Database-System-Setup-1.0.5.exe`, `.exe.blockmap` (82,049), `latest.yml` (378).
 - Root cause of the updater error: `latest.yml` was missing from the v1.0.1 release assets (stale 1.0.0 files were uploaded because `dist/` was not cleaned). Fixed by uploading the missing assets, deleting stale ones, and making `scripts/publisher.js` clean `dist/` before building.
@@ -59,6 +59,19 @@ Project: `C:/Users/Colton/equipment-tracker`
 - **Access codes + levels**: `RANK = { ta: 1, staff: 2, developer: 3 }`. Login gate now takes an access code (`#loginCode`) + password. Developer code `DEV` uses the hardcoded `ADMIN_HASH` (password 2033). Staff/TA codes are created in the Developer Console (`#userCodeInput`, `#userNameInput`, `#userLevelSelect`, `#userPasswordInput`, `#btnSaveUser`, `#userTableBody`) and stored in the cloud `Users` sheet as SHA-256 hashes. `LEVEL_TABS`: TA = checkout only; Staff = checkout, active checkouts, roster, blacklist, inventory, settings; Developer = all tabs. Panels are gated with `data-min-role`. The Drive link input `#googleWebAppUrlInput` is disabled for non-developers (staff can sync but not change the link). `applyRolePermissions(user)` + `can(level)` in `src/auth.js`; `sessionUser` is in-memory only so the code+password is required on every launch. `#roleBadge` shows the user's display name.
 - `loadCloudAuth()` now also pulls the `Users` sheet before the login gate. `saveData()` persists `media_tracker_users` and `media_tracker_blacklist`; the JSON export includes both.
 - All four JS files pass `node --check`. Every new id referenced by renderer.js exists in index.html (verified by count). Build rebuilt into `dist` and the features are present in `app.asar` — but nothing here has been exercised visually in Electron.
+
+## Kiosk mode, blank class period, imported-row ids (commit `f9fa1f5` — NOT in a release yet)
+- **Kiosk mode** (`src/main.js`, `src/preload.js`, `src/renderer.js`, `src/auth.js`, `src/style.css`):
+  - Kiosk state lives in the **main process** so the renderer cannot escape it: `ipcMain.handle('kiosk:get')` / `('kiosk:set')`, `leave-full-screen` re-forces fullscreen while active, and `close` is vetoed while active (turn kiosk off first). Right-click menu is suppressed.
+  - Kiosk flag persists in `localStorage` `lds_auth.kiosk`, so a tablet boots straight into the locked view with **no login gate** — `startAuth()` returns early and applies the kiosk session.
+  - Kiosk session is a pseudo-user `{ code: 'KIOSK', level: 'ta' }` → checkout tab only. `body.kiosk` CSS makes it touch-first (56px min-height inputs/buttons, 44px calendar cells, larger fonts) and hides every tab except checkout.
+  - **Overrides are refused in kiosk** unless a Developer or Staff code + password is entered at that moment (`requestOverride()` → `#modalOverride` → `confirmOverride()` → `canOverride()` requires `RANK >= staff`). Covered: blacklist bypass, stock-limit bypass, and the new duplicate-checkout guard (`existing` active checkouts for the same student blocks checkout).
+  - Exiting kiosk requires the same authorization (`#btnExitKiosk` → override modal → `toggleKiosk(false)` then restores the authenticated user's role). Enable button: `#btnEnableKiosk` in a developer-only Settings panel.
+  - Header additions: `#kioskTag`, `#btnExitKiosk` (Sign Out is hidden while kiosk is active).
+- **Blank class period**: `normalizeRow` no longer defaults a student to "Beginning Digital Media" — an imported roster row with no period stays `''`. The autocomplete only fills the select when the student actually has a period (otherwise it clears it). Checkout no longer requires a class value. Roster shows `—` when blank.
+- **Class period change after checkout writes back**: Active Checkouts now renders a `<select class="class-edit">` per row; changing it updates the checkout record AND the matching student record, and queues both (`updateCheckoutClass`).
+- **Hand-imported sheet rows get system-style ids**: `normalizeRow` previously made `st-cloud-<idx>` style ids. Now `systemId(kind)` produces the normal shape (`st-`, `eq-`, `co-`, `us-`, `bl-` + timestamp, with a counter suffix when several are generated in one pass). `mapCloudRows()` in `syncFromCloud()` detects rows whose raw id was empty and `queueChange(kind, rec)` writes the new id back to the spreadsheet, so the sheet and the app agree.
+- Verified: all four JS files pass `node --check`, every new id exists in index.html, and `npx electron . --enable-logging=stderr` shows no console errors (only the standard CSP dev warning). Kiosk/override behavior has not been exercised visually.
 
 ## Next steps
 1. **The user must redeploy the Apps Script as a NEW version** (Deploy → Manage deployments → pencil → New version, Access must stay **Anyone**) or the `Auth`/`Users`/`Blacklist` sheets do nothing — the `/exec` URL serves the snapshot from deploy time. Verify by opening the `/exec` URL in a browser and confirming the JSON contains `auth`, `users`, `blacklist` keys.
