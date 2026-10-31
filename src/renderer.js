@@ -358,6 +358,17 @@ function saveData() {
 }
 
 // --- OFFLINE-FIRST SYNC ENGINE ---
+const ID_PREFIX = { equipment: 'eq', student: 'st', checkout: 'co', user: 'us', blacklist: 'bl' };
+let idSeq = 0;
+
+// System-style id (same shape the app normally creates: 'st-' + Date.now()).
+// A counter is appended when several rows are generated in one pass so ids
+// never collide.
+function systemId(kind) {
+    idSeq += 1;
+    return `${ID_PREFIX[kind] || 'id'}-${Date.now()}${idSeq > 1 ? '-' + idSeq : ''}`;
+}
+
 function normalizeRow(row, kind, idx) {
     const pick = (keys) => {
         for (const k of keys) {
@@ -368,7 +379,7 @@ function normalizeRow(row, kind, idx) {
 
     if (kind === 'equipment') {
         return {
-            id: pick(['id', 'ID']) || `eq-cloud-${idx}`,
+            id: pick(['id', 'ID']) || systemId('equipment'),
             name: pick(['name', 'Name', 'Equipment', 'Equipment Name']) || 'Unnamed Gear',
             category: pick(['category', 'Category']) || 'Camera',
             stock: parseInt(pick(['stock', 'Stock', 'Max Stock'])) || 1
@@ -377,15 +388,16 @@ function normalizeRow(row, kind, idx) {
 
     if (kind === 'student') {
         return {
-            id: pick(['id', 'ID']) || `st-cloud-${idx}`,
+            id: pick(['id', 'ID']) || systemId('student'),
             name: pick(['name', 'Name', 'Student Name']) || 'Unnamed Student',
-            classType: pick(['classType', 'Class', 'Class Type']) || 'Beginning Digital Media'
+            // No forced default: an imported roster row with no period stays blank.
+            classType: pick(['classType', 'Class', 'Class Type']) || ''
         };
     }
 
     if (kind === 'user') {
         return {
-            id: pick(['id', 'ID']) || `us-cloud-${idx}`,
+            id: pick(['id', 'ID']) || systemId('user'),
             code: pick(['code', 'Code', 'Access Code']),
             name: pick(['name', 'Name', 'Display Name']) || 'Unnamed User',
             level: (pick(['level', 'Level', 'Role']) || 'ta').toLowerCase(),
@@ -395,7 +407,7 @@ function normalizeRow(row, kind, idx) {
 
     if (kind === 'blacklist') {
         return {
-            id: pick(['id', 'ID']) || `bl-cloud-${idx}`,
+            id: pick(['id', 'ID']) || systemId('blacklist'),
             studentName: pick(['studentName', 'Student Name', 'Name']),
             reason: pick(['reason', 'Reason', 'Notes']),
             addedBy: pick(['addedBy', 'Added By']),
@@ -405,7 +417,7 @@ function normalizeRow(row, kind, idx) {
     }
 
     return {
-        id: pick(['id', 'ID']) || `co-cloud-${idx}`,
+        id: pick(['id', 'ID']) || systemId('checkout'),
         studentName: pick(['studentName', 'Student Name']),
         classType: pick(['classType', 'Class', 'Class Type']),
         equipmentId: pick(['equipmentId', 'Equipment ID']),
@@ -570,6 +582,19 @@ function logSync(message, level = '') {
     syncLog.scrollTop = syncLog.scrollHeight;
 }
 
+// Map cloud rows to system-shaped records. Any row that was imported by hand
+// (pasted into the sheet) has no id, so the app assigns a system-style id and
+// queues it back to the sheet so the spreadsheet and the app agree.
+function mapCloudRows(rawList, kind) {
+    if (!Array.isArray(rawList)) return [];
+    return rawList.map((item, idx) => {
+        const rec = normalizeRow(item, kind, idx);
+        const rawId = String((item && (item.id || item.ID)) || '').trim();
+        if (!rawId) queueChange(kind, rec);
+        return rec;
+    });
+}
+
 async function syncFromCloud(showToasts = true) {
     if (!settings.webAppUrl) {
         if (showToasts) showToast('Please enter a Google Web App URL in Settings first.', 'warning');
@@ -593,13 +618,13 @@ async function syncFromCloud(showToasts = true) {
         const cloudData = await res.json();
 
         if (cloudData.equipment && Array.isArray(cloudData.equipment)) {
-            equipment = cloudData.equipment.map((item, idx) => normalizeRow(item, 'equipment', idx));
+            equipment = mapCloudRows(cloudData.equipment, 'equipment');
         }
         if (cloudData.students && Array.isArray(cloudData.students)) {
-            students = cloudData.students.map((item, idx) => normalizeRow(item, 'student', idx));
+            students = mapCloudRows(cloudData.students, 'student');
         }
         if (cloudData.checkouts && Array.isArray(cloudData.checkouts)) {
-            checkouts = cloudData.checkouts.map((item, idx) => normalizeRow(item, 'checkout', idx));
+            checkouts = mapCloudRows(cloudData.checkouts, 'checkout');
         }
         if (cloudData.auth && Array.isArray(cloudData.auth)) {
             const row = cloudData.auth.find(r => String(r.key) === 'teacherHash');
@@ -610,10 +635,10 @@ async function syncFromCloud(showToasts = true) {
             }
         }
         if (cloudData.users && Array.isArray(cloudData.users)) {
-            users = cloudData.users.map((item, idx) => normalizeRow(item, 'user', idx)).filter(u => u.code);
+            users = mapCloudRows(cloudData.users, 'user').filter(u => u.code);
         }
         if (cloudData.blacklist && Array.isArray(cloudData.blacklist)) {
-            blacklist = cloudData.blacklist.map((item, idx) => normalizeRow(item, 'blacklist', idx));
+            blacklist = mapCloudRows(cloudData.blacklist, 'blacklist');
         }
 
         // Put unsynced local changes back on top of the cloud snapshot
@@ -799,11 +824,16 @@ document.querySelectorAll('.tag-btn').forEach(btn => {
 });
 
 // --- STUDENT AUTOCOMPLETE & CLASS AUTO-FILL ---
+// Only auto-fills when the student actually has a period on record.
+// A roster imported without a period stays blank instead of defaulting to
+// Beginning Digital Media.
 studentNameInput.addEventListener('input', () => {
     const val = studentNameInput.value.trim();
     const matched = students.find(s => s.name.toLowerCase() === val.toLowerCase());
-    if (matched) {
+    if (matched && matched.classType) {
         classTypeSelect.value = matched.classType;
+    } else {
+        classTypeSelect.value = '';
     }
 });
 
@@ -872,6 +902,33 @@ function populateEquipmentDropdown() {
     if (currentVal) equipmentSelect.value = currentVal;
 }
 
+const CLASS_OPTIONS = ['Beginning Digital Media', 'Advanced Digital Media', 'Yearbook', 'Leadership/ASB', 'Other'];
+
+function classSelectHtml(current, id) {
+    const opts = ['<option value="">— none —</option>']
+        .concat(CLASS_OPTIONS.map(c => `<option value="${escapeHtml(c)}"${c === current ? ' selected' : ''}>${escapeHtml(c)}</option>`));
+    return `<select class="class-edit" data-id="${id}">${opts.join('')}</select>`;
+}
+
+// Changing the period on an existing checkout writes back to the database
+// (both the checkout row and the student's roster record).
+function updateCheckoutClass(id, newClass) {
+    const c = checkouts.find(x => x.id === id);
+    if (!c) return;
+    c.classType = newClass;
+    saveData();
+    queueChange('checkout', c);
+
+    const s = students.find(st => String(st.name).toLowerCase() === String(c.studentName).toLowerCase());
+    if (s) {
+        s.classType = newClass;
+        queueChange('student', s);
+    }
+
+    showToast(`Class period updated for ${c.studentName}.`, 'success');
+    renderRosterTable();
+}
+
 function renderActiveCheckouts() {
     const searchTerm = searchActiveInput.value.toLowerCase().trim();
     const activeList = checkouts.filter(c => c.status === 'active');
@@ -910,7 +967,7 @@ function renderActiveCheckouts() {
 
         tr.innerHTML = `
             <td><strong>${escapeHtml(item.studentName)}</strong>${isBlacklisted(item.studentName) ? ' <span class="badge-pill badge-blacklist">🚫 Blacklisted</span>' : ''}</td>
-            <td><span class="badge-pill badge-class">${escapeHtml(item.classType)}</span></td>
+            <td>${classSelectHtml(item.classType, item.id)}</td>
             <td>${escapeHtml(item.equipmentName)}</td>
             <td style="color: var(--text-muted); font-size: 0.85rem;">${escapeHtml(item.accessories || '—')}</td>
             <td>${item.checkoutDate}</td>
@@ -931,6 +988,13 @@ function renderActiveCheckouts() {
         btn.addEventListener('click', () => {
             const coId = btn.getAttribute('data-id');
             returnEquipment(coId);
+        });
+    });
+
+    // Attach class-period change listeners
+    activeCheckoutsTableBody.querySelectorAll('.class-edit').forEach(sel => {
+        sel.addEventListener('change', () => {
+            updateCheckoutClass(sel.getAttribute('data-id'), sel.value);
         });
     });
 }
@@ -1006,7 +1070,7 @@ function renderRosterTable() {
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td><strong>${escapeHtml(student.name)}</strong></td>
-            <td><span class="badge-pill badge-class">${escapeHtml(student.classType)}</span></td>
+            <td><span class="badge-pill badge-class">${escapeHtml(student.classType) || '—'}</span></td>
             <td>${activeCount > 0 ? `<span class="badge-pill badge-active">${activeCount} active</span>` : '0'}</td>
             <td>${totalCount} total</td>
             <td>
@@ -1121,16 +1185,22 @@ checkoutForm.addEventListener('submit', (e) => {
     const returnDate = returnDateInput.value;
     const accessories = accessoriesInput.value.trim();
 
-    if (!typedName || !selectedClass || !selectedEquipId || !returnDate) {
+    if (!typedName || !selectedEquipId || !returnDate) {
         showToast('Please fill out all required fields.', 'warning');
         return;
     }
 
-    // Blacklisted students cannot check out equipment.
+    // Blacklisted students cannot check out equipment. In kiosk mode this can
+    // only be bypassed by a Developer or Staff code + password.
     if (isBlacklisted(typedName)) {
         const entry = blacklist.find(b => String(b.studentName).toLowerCase() === typedName.toLowerCase());
-        showToast(`${typedName} is blacklisted${entry && entry.reason ? ' — ' + entry.reason : ''}. Checkout blocked.`, 'error');
-        return;
+        const reason = `${typedName} is blacklisted${entry && entry.reason ? ' — ' + entry.reason : ''}.`;
+        if (!canOverride()) {
+            showToast(reason + ' Override requires a Developer or Staff code.', 'error');
+            requestOverride(`${reason} Enter a Developer or Staff code and password to override.`, () => proceedCheckout(pendingCheckoutData));
+            return;
+        }
+        showToast(reason + ' Overridden by ' + displayNameFor(sessionUser) + '.', 'warning');
     }
 
     const matchedEquipment = equipment.find(e => e.id === selectedEquipId);
@@ -1158,9 +1228,26 @@ checkoutForm.addEventListener('submit', (e) => {
         return;
     }
 
-    // 2. Check Equipment Stock
+    // 2. Check for an existing active checkout for this student
+    const existing = checkouts.filter(c => c.status === 'active' && String(c.studentName).toLowerCase() === typedName.toLowerCase());
+    if (existing.length > 0) {
+        const reason = `${typedName} already has ${existing.length} item(s) checked out (${existing.map(c => c.equipmentName).join(', ')}).`;
+        if (!canOverride()) {
+            showToast(reason + ' Override requires a Developer or Staff code.', 'error');
+            requestOverride(`${reason} Enter a Developer or Staff code and password to override.`, () => proceedCheckout(pendingCheckoutData));
+            return;
+        }
+        showToast(reason + ' Overridden by ' + displayNameFor(sessionUser) + '.', 'warning');
+    }
+
+    // 3. Check Equipment Stock
     checkStockAndProceed();
 });
+
+function proceedCheckout(data) {
+    pendingCheckoutData = data;
+    checkStockAndProceed();
+}
 
 function checkStockAndProceed() {
     const item = equipment.find(e => e.id === pendingCheckoutData.equipmentId);
@@ -1232,6 +1319,19 @@ btnCancelStockOverride.addEventListener('click', () => {
 });
 
 btnConfirmStockOverride.addEventListener('click', () => {
+    const data = pendingCheckoutData;
+    const finish = () => {
+        pendingCheckoutData = data;
+        finalizeCheckout();
+    };
+
+    // In kiosk mode a stock-limit override needs a Developer or Staff code.
+    if (kioskMode && !canOverride()) {
+        modalStockWarning.classList.remove('active');
+        requestOverride('Stock limit reached. Enter a Developer or Staff code and password to override.', finish);
+        return;
+    }
+
     modalStockWarning.classList.remove('active');
     finalizeCheckout();
 });
@@ -1312,7 +1412,7 @@ btnOpenAddStudent.addEventListener('click', () => {
     modalStudentTitle.textContent = 'Add Student';
     editStudentId.value = '';
     studentFullNameInput.value = '';
-    studentClassTypeSelect.value = 'Beginning Digital Media';
+    studentClassTypeSelect.value = '';
     modalStudent.classList.add('active');
 });
 
@@ -1620,6 +1720,133 @@ function escapeHtml(str) {
 refreshUI();
 renderQueueStatus();
 
+// --- KIOSK MODE ---
+// Kiosk is a locked-down, touch-first checkout-only view. The session in kiosk
+// is a TA, so no override is possible until a Developer or Staff code + password
+// is entered. Fullscreen is enforced in the main process (src/main.js).
+let kioskMode = false;
+let pendingOverride = null;
+
+function kioskUser() {
+    return { id: 'kiosk', code: 'KIOSK', name: 'Kiosk', level: 'ta', passwordHash: '' };
+}
+
+function applyKioskUI(on) {
+    kioskMode = !!on;
+    document.body.classList.toggle('kiosk', kioskMode);
+
+    const badge = document.getElementById('roleBadge');
+    const exitBtn = document.getElementById('btnExitKiosk');
+    const signOut = document.getElementById('btnLogout');
+    const kioskTag = document.getElementById('kioskTag');
+
+    if (kioskMode) {
+        sessionUser = kioskUser();
+        applyRolePermissions(sessionUser);
+        if (badge) badge.textContent = 'Kiosk (locked)';
+        if (signOut) signOut.style.display = 'none';
+        if (exitBtn) exitBtn.style.display = '';
+        if (kioskTag) kioskTag.style.display = '';
+
+        // Force the checkout tab — nothing else is reachable in kiosk.
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        const nav = document.querySelector('.nav-item[data-tab="checkout"]');
+        const tab = document.getElementById('tab-checkout');
+        if (nav) nav.classList.add('active');
+        if (tab) tab.classList.add('active');
+    } else {
+        if (exitBtn) exitBtn.style.display = 'none';
+        if (kioskTag) kioskTag.style.display = 'none';
+        if (signOut) signOut.style.display = '';
+        if (badge && sessionUser) badge.textContent = displayNameFor(sessionUser);
+    }
+}
+
+function openOverrideModal(reason, onAllowed) {
+    const modal = document.getElementById('modalOverride');
+    const msg = document.getElementById('overrideMessage');
+    if (!modal) { onAllowed(); return; }
+
+    pendingOverride = onAllowed;
+    if (msg) msg.textContent = reason;
+    modal.classList.add('active');
+
+    const codeInput = document.getElementById('overrideCode');
+    const pwInput = document.getElementById('overridePassword');
+    if (codeInput) codeInput.value = '';
+    if (pwInput) pwInput.value = '';
+    if (codeInput) codeInput.focus();
+}
+
+async function confirmOverride() {
+    const modal = document.getElementById('modalOverride');
+    const msg = document.getElementById('overrideMessage');
+    const codeInput = document.getElementById('overrideCode');
+    const pwInput = document.getElementById('overridePassword');
+
+    const code = codeInput ? codeInput.value.trim() : '';
+    const pw = pwInput ? pwInput.value : '';
+    if (!code || !pw) {
+        if (msg) msg.textContent = 'Enter the access code and password.';
+        return;
+    }
+
+    const user = await attemptLogin(code, pw);
+    if (!user) {
+        if (msg) msg.textContent = 'Unknown code or incorrect password.';
+        return;
+    }
+    if (RANK[user.level] < RANK.staff) {
+        if (msg) msg.textContent = 'Only a Developer or Staff code can override.';
+        return;
+    }
+
+    modal.classList.remove('active');
+    const cb = pendingOverride;
+    pendingOverride = null;
+    showToast(`Override approved by ${displayNameFor(user)}.`, 'success');
+    if (cb) cb(user);
+}
+
+function requestOverride(reason, onAllowed) {
+    if (canOverride()) { onAllowed(); return; }
+    openOverrideModal(reason, onAllowed);
+}
+
+async function toggleKiosk(on) {
+    if (window.electronAPI && window.electronAPI.setKioskState) {
+        await window.electronAPI.setKioskState(on);
+    }
+    setKioskFlag(on);
+    applyKioskUI(on);
+    showToast(on ? 'Kiosk mode enabled — checkout only.' : 'Kiosk mode disabled.', 'info');
+}
+
+const btnExitKiosk = document.getElementById('btnExitKiosk');
+if (btnExitKiosk) {
+    btnExitKiosk.addEventListener('click', () => {
+        openOverrideModal('Enter a Developer or Staff code and password to exit kiosk mode.', async (user) => {
+            await toggleKiosk(false);
+            sessionUser = user;
+            applyRolePermissions(user);
+        });
+    });
+}
+
+const btnEnableKiosk = document.getElementById('btnEnableKiosk');
+if (btnEnableKiosk) {
+    btnEnableKiosk.addEventListener('click', () => toggleKiosk(true));
+}
+
+const btnOverrideConfirm = document.getElementById('btnOverrideConfirm');
+const btnOverrideCancel = document.getElementById('btnOverrideCancel');
+if (btnOverrideConfirm) btnOverrideConfirm.addEventListener('click', confirmOverride);
+if (btnOverrideCancel) btnOverrideCancel.addEventListener('click', () => {
+    document.getElementById('modalOverride').classList.remove('active');
+    pendingOverride = null;
+});
+
 // --- AUTH / LOGIN GATE ---
 // The password is required on every launch: the role is kept in memory only,
 // so nothing is remembered between runs except the teacher password hash.
@@ -1633,6 +1860,20 @@ async function startAuth() {
     // password set on another device works here. Falls back to local on failure.
     const auth = await loadCloudAuth();
     if (nameInput) nameInput.value = auth.teacherName || 'Mr. Lanning';
+
+    // Kiosk persists across restarts, so a tablet boots straight into the locked
+    // checkout view with no login gate. Exiting still needs a code + password.
+    if (auth.kiosk) {
+        showSplash(1800, async () => {
+            if (window.electronAPI && window.electronAPI.getKioskState) {
+                const on = await window.electronAPI.getKioskState();
+                applyKioskUI(on);
+            } else {
+                applyKioskUI(true);
+            }
+        });
+        return;
+    }
 
     showSplash(1800, () => showLoginGate(applyRolePermissions));
 

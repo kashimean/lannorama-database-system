@@ -7,5 +7,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getUpdaterState: () => ipcRenderer.invoke('updater:state'),
     onUpdaterState: (callback) => {
         ipcRenderer.on('updater:state', (_event, state) => callback(state));
+    },
+
+    // Kiosk mode (main process holds the truth, renderer only requests it)
+    getKioskState: () => ipcRenderer.invoke('kiosk:get'),
+    setKioskState: (on) => ipcRenderer.invoke('kiosk:set', on),
+    onKioskState: (callback) => {
+        ipcRenderer.on('kiosk:state', (_event, on) => callback(on));
     }
 });

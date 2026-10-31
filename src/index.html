@@ -61,6 +61,8 @@
             <span class="status-dot" id="syncStatusDot"></span>
             <span id="syncStatusText">Local Storage Mode</span>
             <span class="role-badge" id="roleBadge">Locked</span>
+            <span class="role-badge kiosk-tag" id="kioskTag" style="display:none;">🖥️ Kiosk</span>
+            <button class="btn btn-secondary btn-sm" id="btnExitKiosk" style="display:none;">🔓 Exit Kiosk</button>
             <button class="btn btn-secondary btn-sm" id="btnLogout" style="display:none;">🔒 Sign Out</button>
         </div>
     </header>
@@ -463,6 +465,25 @@
                     </div>
                 </div>
 
+                <!-- KIOSK MODE (developer only) -->
+                <div class="panel" data-min-role="developer">
+                    <div class="panel-header">
+                        <div class="panel-title">
+                            <span>🖥️</span> Kiosk Mode
+                        </div>
+                        <span class="badge-pill badge-class">Developer</span>
+                    </div>
+
+                    <p style="color:var(--text-muted);font-size:0.92rem;margin-bottom:14px;">
+                        Locks the app into fullscreen on a tablet: checkout only, no settings, no roster, no blacklist, no inventory. Overrides (blacklist, stock limit, duplicate checkout) are refused unless a Developer or Staff code and password is entered at that moment. Kiosk stays on across restarts, and exiting requires a code + password.
+                    </p>
+
+                    <button class="btn btn-primary" id="btnEnableKiosk">🖥️ Enable Kiosk Mode</button>
+                    <p style="color:var(--text-muted);font-size:0.85rem;margin-top:12px;">
+                        Fullscreen is enforced by the main process — F11/Esc cannot break out of it, and the window cannot be closed while kiosk is active.
+                    </p>
+                </div>
+
                 <!-- UPDATER PANEL (staff and above) -->
                 <div class="panel" data-teacher-access="1" data-min-role="staff">
                     <div class="panel-header">
@@ -641,6 +662,32 @@
     </div>
 
     <!-- MODAL 3: ADD/EDIT EQUIPMENT -->
+    <!-- OVERRIDE AUTH MODAL -->
+    <div class="modal-overlay" id="modalOverride">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>🔑 Override Authorization</h3>
+            </div>
+            <div class="modal-body">
+                <p id="overrideMessage" style="color:var(--text-muted);margin-bottom:14px;">
+                    A Developer or Staff code is required for this override.
+                </p>
+                <div class="form-group">
+                    <label for="overrideCode">Access code</label>
+                    <input type="text" id="overrideCode" autocomplete="off" placeholder="e.g. DEV">
+                </div>
+                <div class="form-group" style="margin-top:12px;">
+                    <label for="overridePassword">Password</label>
+                    <input type="password" id="overridePassword" autocomplete="off" placeholder="Password">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="btnOverrideCancel">Cancel</button>
+                <button class="btn btn-primary" id="btnOverrideConfirm">Authorize Override</button>
+            </div>
+        </div>
+    </div>
+
     <div class="modal-overlay" id="modalEquipment">
         <div class="modal-card">
             <div class="modal-header">

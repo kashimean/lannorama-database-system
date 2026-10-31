@@ -32,22 +32,43 @@ async function sha256(text) {
 
 function getAuth() {
     const raw = localStorage.getItem('lds_auth');
-    if (!raw) return { teacherHash: null, teacherName: 'Mr. Lanning' };
+    if (!raw) return { teacherHash: null, teacherName: 'Mr. Lanning', kiosk: false };
     try {
         const a = JSON.parse(raw);
-        return { teacherHash: a.teacherHash || null, teacherName: a.teacherName || 'Mr. Lanning' };
+        return {
+            teacherHash: a.teacherHash || null,
+            teacherName: a.teacherName || 'Mr. Lanning',
+            kiosk: !!a.kiosk
+        };
     } catch (e) {
-        return { teacherHash: null, teacherName: 'Mr. Lanning' };
+        return { teacherHash: null, teacherName: 'Mr. Lanning', kiosk: false };
     }
 }
 
 function saveAuth(auth) {
-    // Only the display name and the legacy teacher hash persist. The session user
-    // is held in memory only, so the app asks for a code + password on every launch.
+    // Only the display name, the legacy teacher hash and the kiosk flag persist.
+    // The session user is held in memory only, so the app asks for a code +
+    // password on every launch.
     localStorage.setItem('lds_auth', JSON.stringify({
         teacherHash: auth.teacherHash,
-        teacherName: auth.teacherName || 'Mr. Lanning'
+        teacherName: auth.teacherName || 'Mr. Lanning',
+        kiosk: !!auth.kiosk
     }));
+}
+
+function setKioskFlag(on) {
+    const auth = getAuth();
+    auth.kiosk = !!on;
+    saveAuth(auth);
+    return auth.kiosk;
+}
+
+// Overrides (blacklist bypass, stock bypass, duplicate-checkout bypass) are
+// never allowed for a TA. In kiosk mode the session is a TA, so an override
+// requires a Developer or Staff code + password entered at that moment.
+function canOverride() {
+    const level = currentRole();
+    return level === 'developer' || level === 'staff';
 }
 
 let sessionUser = null;
