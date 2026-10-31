@@ -309,6 +309,24 @@ const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwafWSa
 let settings = JSON.parse(localStorage.getItem('media_tracker_settings')) || { webAppUrl: DEFAULT_APPS_SCRIPT_URL };
 if (!settings.webAppUrl) settings.webAppUrl = DEFAULT_APPS_SCRIPT_URL;
 
+// Clean duplicate names in the local copy as well, not just on cloud sync.
+// When offline these become queued deletes that apply once the connection returns.
+let localDupes = 0;
+const dupCount = (list, kind) => {
+    const seen = new Set();
+    let removed = 0;
+    list.forEach(r => {
+        const key = String(r.name || '').trim().toLowerCase();
+        if (!key) return;
+        if (seen.has(key)) { removed++; return; }
+        seen.add(key);
+    });
+    return removed;
+};
+localDupes = dupCount(equipment, 'equipment') + dupCount(students, 'student');
+equipment = dedupeByName(equipment, 'equipment');
+students = dedupeByName(students, 'student');
+
 let users = JSON.parse(localStorage.getItem('media_tracker_users')) || DEFAULT_USERS;
 let blacklist = JSON.parse(localStorage.getItem('media_tracker_blacklist')) || [];
 let pendingQueue = JSON.parse(localStorage.getItem('media_tracker_queue')) || [];
@@ -2006,6 +2024,11 @@ async function startAuth() {
 }
 
 startAuth();
+
+if (localDupes > 0) {
+    logSync(`Removed ${localDupes} duplicate name(s) from the local data — queued for the sheet.`, 'ok');
+    showToast(`Found ${localDupes} duplicate name(s). Kept the first, queued the rest for deletion.`, 'warning');
+}
 
 if (settings.webAppUrl) {
     syncFromCloud(false);
