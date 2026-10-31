@@ -75,7 +75,7 @@ function sheetForAction(a) {
   if (type === "checkout") return "Checkouts";
   if (type === "student" || type === "delete_student") return "Students";
   if (type === "equipment" || type === "delete_equipment") return "Equipment";
-  if (type === "auth") return "Auth";
+  if (type === "auth" || type === "delete_auth") return "Auth";
   if (type === "user" || type === "delete_user") return "Users";
   if (type === "blacklist" || type === "delete_blacklist") return "Blacklist";
   return null;
