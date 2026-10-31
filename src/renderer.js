@@ -309,10 +309,16 @@ const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwafWSa
 let settings = JSON.parse(localStorage.getItem('media_tracker_settings')) || { webAppUrl: DEFAULT_APPS_SCRIPT_URL };
 if (!settings.webAppUrl) settings.webAppUrl = DEFAULT_APPS_SCRIPT_URL;
 
-// Clean duplicate names in the local copy as well, not just on cloud sync.
-// When offline these become queued deletes that apply once the connection returns.
+let users = JSON.parse(localStorage.getItem('media_tracker_users')) || DEFAULT_USERS;
+let blacklist = JSON.parse(localStorage.getItem('media_tracker_blacklist')) || [];
+let pendingQueue = JSON.parse(localStorage.getItem('media_tracker_queue')) || [];
+let lastSync = localStorage.getItem('media_tracker_lastsync') || '';
+
+// Duplicate-name cleanup for the local copy. Defined here but executed at boot,
+// AFTER the DOM consts (statActive etc.) are initialized — running it here made
+// queueChange -> flushQueue -> renderStats touch statActive before initialization.
 let localDupes = 0;
-const dupCount = (list, kind) => {
+const dupCount = (list) => {
     const seen = new Set();
     let removed = 0;
     list.forEach(r => {
@@ -323,14 +329,6 @@ const dupCount = (list, kind) => {
     });
     return removed;
 };
-localDupes = dupCount(equipment, 'equipment') + dupCount(students, 'student');
-equipment = dedupeByName(equipment, 'equipment');
-students = dedupeByName(students, 'student');
-
-let users = JSON.parse(localStorage.getItem('media_tracker_users')) || DEFAULT_USERS;
-let blacklist = JSON.parse(localStorage.getItem('media_tracker_blacklist')) || [];
-let pendingQueue = JSON.parse(localStorage.getItem('media_tracker_queue')) || [];
-let lastSync = localStorage.getItem('media_tracker_lastsync') || '';
 
 let pendingCheckoutData = null; // Holds form data during dialog confirmation prompts
 
@@ -1982,9 +1980,13 @@ async function startAuth() {
     const btnSet = document.getElementById('btnSetTeacherPassword');
     const btnOut = document.getElementById('btnLogout');
 
-    // Pull the teacher hash from the cloud before the gate is shown, so a
-    // password set on another device works here. Falls back to local on failure.
-    const auth = await loadCloudAuth();
+    // Show the splash immediately. Previously this function awaited the cloud
+    // call first, so a hanging fetch kept the splash up forever and the login
+    // gate never appeared.
+    const auth = await Promise.race([
+        loadCloudAuth(),
+        new Promise(res => setTimeout(() => res(getAuth()), 5000))
+    ]);
     if (nameInput) nameInput.value = auth.teacherName || 'Mr. Lanning';
 
     // Kiosk persists across restarts, so a tablet boots straight into the locked
@@ -2017,13 +2019,20 @@ async function startAuth() {
 
     if (btnOut) {
         btnOut.addEventListener('click', () => {
-            logout();
-            location.reload();
+            signOut();
         });
     }
 }
 
 startAuth();
+
+// Run at boot, after all DOM consts exist. Keeps the first occurrence of each
+// name and queues the rest for deletion (applied to the sheet when online).
+localDupes = dupCount(equipment) + dupCount(students);
+equipment = dedupeByName(equipment, 'equipment');
+students = dedupeByName(students, 'student');
+renderInventoryTable();
+renderRosterTable();
 
 if (localDupes > 0) {
     logSync(`Removed ${localDupes} duplicate name(s) from the local data — queued for the sheet.`, 'ok');

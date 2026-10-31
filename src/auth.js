@@ -72,6 +72,7 @@ function canOverride() {
 }
 
 let sessionUser = null;
+let loginGateBound = false;
 
 // Pull the teacher hash/name and the access codes from the cloud (best effort).
 async function loadCloudAuth() {
@@ -79,7 +80,16 @@ async function loadCloudAuth() {
     if (!url || !navigator.onLine) return getAuth();
 
     try {
-        const res = await fetch(url);
+        // A hanging fetch used to block startAuth() before the splash could
+        // ever hide, so the app looked frozen. Abort instead of waiting forever.
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 4000);
+        let res;
+        try {
+            res = await fetch(url, { signal: ctrl.signal });
+        } finally {
+            clearTimeout(timer);
+        }
         if (!res.ok) return getAuth();
         const cloud = await res.json();
 
@@ -281,12 +291,25 @@ function showLoginGate(onSuccess) {
         if (onSuccess) onSuccess(user);
     };
 
-    document.getElementById('loginSubmit').addEventListener('click', submit);
-    input.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
-    if (codeInput) codeInput.addEventListener('keydown', e => { if (e.key === 'Enter') input.focus(); });
+    // Bound once, so signing out and returning to the gate does not stack
+    // duplicate listeners (each extra click would fire submit more than once).
+    if (!loginGateBound) {
+        loginGateBound = true;
+        document.getElementById('loginSubmit').addEventListener('click', submit);
+        input.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+        if (codeInput) codeInput.addEventListener('keydown', e => { if (e.key === 'Enter') input.focus(); });
+    }
     if (codeInput) codeInput.focus();
 }
 
 function logout() {
     sessionUser = null;
+}
+
+// Sign out returns straight to the login gate — no splash replay, no reload.
+function signOut() {
+    logout();
+    const splash = document.getElementById('splashScreen');
+    if (splash) { splash.style.display = 'none'; splash.classList.remove('fade-out'); }
+    showLoginGate(applyRolePermissions);
 }
