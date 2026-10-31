@@ -112,20 +112,25 @@ function upsert(ss, name, record) {
   var sheet = getOrCreateSheet(ss, name);
   var values = sheet.getDataRange().getValues();
   var canonical = HEADERS[name];
-
-  // Repair the header row so future writes line up with the canonical columns.
   var headers = values[0].map(normalizeHeader);
-  var fixed = false;
-  for (var i = 0; i < canonical.length; i++) {
-    if (headers[i] !== canonical[i]) { headers[i] = canonical[i]; fixed = true; }
-  }
-  if (fixed) sheet.getRange(1, 1, 1, canonical.length).setValues([canonical]);
 
+  // Write by the actual column position of each canonical header. Assuming
+  // canonical order corrupts data on sheets whose columns are arranged
+  // differently (e.g. name before id).
+  var colOf = {};
+  canonical.forEach(function (h) {
+    var idx = headers.indexOf(h);
+    colOf[h] = idx === -1 ? canonical.indexOf(h) : idx;
+  });
+
+  var idCol = colOf["id"];
   var rowArr = canonical.map(function (h) { return record[h] !== undefined ? record[h] : ""; });
 
   for (var r = 1; r < values.length; r++) {
-    if (String(values[r][0]).trim() === String(record.id).trim()) {
-      sheet.getRange(r + 1, 1, 1, canonical.length).setValues([rowArr]);
+    if (String(values[r][idCol]).trim() === String(record.id).trim()) {
+      var out = [];
+      canonical.forEach(function (h) { out[colOf[h]] = record[h] !== undefined ? record[h] : ""; });
+      sheet.getRange(r + 1, 1, 1, canonical.length).setValues([out]);
       return;
     }
   }
@@ -1751,6 +1756,32 @@ if (btnClearQueue) {
         setSyncStatus('Queue cleared — re-sync to compare against the sheet', false);
         logSync(`Dropped ${count} unconfirmable queue entry(ies).`, 'warn');
         showToast(`Queue cleared (${count}). Local data now matches the sheet on the next sync.`, 'success');
+    });
+}
+
+// Explicit duplicate-name sweep for Students and Equipment: keeps the first
+// occurrence of each name and queues the rest as deletes so the sheet is cleaned too.
+const btnCleanDupes = document.getElementById('btnCleanDupes');
+if (btnCleanDupes) {
+    btnCleanDupes.addEventListener('click', async () => {
+        const before = { students: students.length, equipment: equipment.length };
+        students = dedupeByName(students, 'student');
+        equipment = dedupeByName(equipment, 'equipment');
+        const removed = (before.students - students.length) + (before.equipment - equipment.length);
+
+        renderRosterTable();
+        renderInventoryTable();
+        renderStats();
+
+        if (removed === 0) {
+            logSync('Duplicate sweep found no repeated names in Students or Equipment.', 'ok');
+            showToast('No duplicate names found.', 'info');
+            return;
+        }
+
+        logSync(`Duplicate sweep: ${before.students - students.length} student name(s) and ${before.equipment - equipment.length} equipment name(s) queued for deletion.`, 'warn');
+        showToast(`Queued ${removed} duplicate name(s) for deletion.`, 'success');
+        await flushQueue(true);
     });
 }
 

@@ -109,20 +109,25 @@ function upsert(ss, name, record) {
   var sheet = getOrCreateSheet(ss, name);
   var values = sheet.getDataRange().getValues();
   var canonical = HEADERS[name];
-
-  // Repair the header row so future writes line up with the canonical columns.
   var headers = values[0].map(normalizeHeader);
-  var fixed = false;
-  for (var i = 0; i < canonical.length; i++) {
-    if (headers[i] !== canonical[i]) { headers[i] = canonical[i]; fixed = true; }
-  }
-  if (fixed) sheet.getRange(1, 1, 1, canonical.length).setValues([canonical]);
 
+  // Write by the actual column position of each canonical header. Assuming
+  // canonical order corrupts data on sheets whose columns are arranged
+  // differently (e.g. name before id).
+  var colOf = {};
+  canonical.forEach(function (h) {
+    var idx = headers.indexOf(h);
+    colOf[h] = idx === -1 ? canonical.indexOf(h) : idx;
+  });
+
+  var idCol = colOf["id"];
   var rowArr = canonical.map(function (h) { return record[h] !== undefined ? record[h] : ""; });
 
   for (var r = 1; r < values.length; r++) {
-    if (String(values[r][0]).trim() === String(record.id).trim()) {
-      sheet.getRange(r + 1, 1, 1, canonical.length).setValues([rowArr]);
+    if (String(values[r][idCol]).trim() === String(record.id).trim()) {
+      var out = [];
+      canonical.forEach(function (h) { out[colOf[h]] = record[h] !== undefined ? record[h] : ""; });
+      sheet.getRange(r + 1, 1, 1, canonical.length).setValues([out]);
       return;
     }
   }
