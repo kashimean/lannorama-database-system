@@ -1885,6 +1885,17 @@ function renderUpdaterState(state) {
     btnDownloadUpdate.disabled = state.status !== 'available';
     btnInstallUpdate.disabled = state.status !== 'downloaded';
 
+    // Keep the popup buttons in sync with the updater state so the user can
+    // actually install once the download finishes.
+    const popup = document.getElementById('updatePopup');
+    const popupDownload = document.getElementById('popupDownload');
+    const popupInstall = document.getElementById('popupInstall');
+    if (popup && popup.style.display !== 'none') {
+        if (popupDownload) popupDownload.style.display = state.status === 'available' ? '' : 'none';
+        if (popupInstall) popupInstall.style.display = state.status === 'downloaded' ? '' : 'none';
+        if (state.status === 'downloaded') playSound('success');
+    }
+
     // Notify on launch when an update is found
     if (state.status === 'available' && !updatePopupShown) {
         updatePopupShown = true;
@@ -1903,6 +1914,7 @@ if (window.electronAPI && window.electronAPI.getUpdaterState) {
     const popupDownload = document.getElementById('popupDownload');
     const popupLater = document.getElementById('popupLater');
     if (popupDownload) popupDownload.addEventListener('click', () => window.electronAPI.downloadUpdate());
+    if (popupInstall) popupInstall.addEventListener('click', () => window.electronAPI.installUpdate());
     if (popupLater) popupLater.addEventListener('click', () => {
         document.getElementById('updatePopup').style.display = 'none';
     });

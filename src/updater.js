@@ -76,9 +76,9 @@ function initUpdater(win) {
         autoUpdater.quitAndInstall();
     });
 
-    ipcMain.handle('updater:state', () => updateState);
-
-    // Check on launch, then every 12 hours
+    // Check on launch, then every 12 hours.
+    // (A second ipcMain.handle('updater:state') used to live here and threw,
+    // which aborted initUpdater before this launch check could ever run.)
     autoUpdater.checkForUpdates().catch(() => {});
     setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 12 * 60 * 60 * 1000);
 }
