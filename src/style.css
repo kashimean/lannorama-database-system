@@ -1119,6 +1119,11 @@ body.kiosk .panel:not(.kiosk-allowed) {
   display: none !important;
 }
 
+/* Kiosk is a checkout-only view: no stats bar (Total Students, Gear Types, etc). */
+body.kiosk .stats-grid {
+  display: none !important;
+}
+
 body.kiosk .modal-card {
   min-width: 420px;
   max-width: 90vw;

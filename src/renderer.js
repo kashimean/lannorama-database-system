@@ -1344,23 +1344,11 @@ checkoutForm.addEventListener('submit', (e) => {
         return;
     }
 
-    // Blacklisted students cannot check out equipment. In kiosk mode this can
-    // only be bypassed by a Developer or Staff code + password.
-    if (isBlacklisted(typedName)) {
-        const entry = blacklist.find(b => String(b.studentName).toLowerCase() === typedName.toLowerCase());
-        const reason = `${typedName} is blacklisted${entry && entry.reason ? ' — ' + entry.reason : ''}.`;
-        if (!canOverride()) {
-            showToast(reason + ' Override requires a Developer or Staff code.', 'error');
-            requestOverride(`${reason} Enter a Developer or Staff code and password to override.`, () => proceedCheckout(pendingCheckoutData));
-            return;
-        }
-        showToast(reason + ' Overridden by ' + displayNameFor(sessionUser) + '.', 'warning');
-    }
-
     const matchedEquipment = equipment.find(e => e.id === selectedEquipId);
     if (!matchedEquipment) return;
 
-    // Package pending data
+    // Package pending data BEFORE the override checks. The override callback runs
+    // later, asynchronously, so it must see this checkout's data, not a stale one.
     pendingCheckoutData = {
         studentName: typedName,
         classType: selectedClass,
@@ -1371,6 +1359,20 @@ checkoutForm.addEventListener('submit', (e) => {
         returnDate: returnDate,
         status: 'active'
     };
+
+    // Blacklisted students cannot check out equipment. In kiosk mode this can
+    // only be bypassed by a Developer or Staff code + password.
+    if (isBlacklisted(typedName)) {
+        const entry = blacklist.find(b => String(b.studentName).toLowerCase() === typedName.toLowerCase());
+        const reason = `${typedName} is blacklisted${entry && entry.reason ? ' — ' + entry.reason : ''}.`;
+        if (!canOverride()) {
+            showToast(reason + ' Override requires a Developer or Staff code.', 'error');
+            const data = pendingCheckoutData;
+            requestOverride(`${reason} Enter a Developer or Staff code and password to override.`, () => proceedCheckout(data));
+            return;
+        }
+        showToast(reason + ' Overridden by ' + displayNameFor(sessionUser) + '.', 'warning');
+    }
 
     // 1. Check if student is registered in database
     const registeredStudent = students.find(s => s.name.toLowerCase() === typedName.toLowerCase());
