@@ -821,6 +821,18 @@ button:disabled {
   font-weight: 700;
   color: var(--text-main);
   margin-bottom: 4px;
+  letter-spacing: 0.02em;
+}
+
+.login-card::after {
+  content: '';
+  position: absolute;
+  left: 38px;
+  right: 38px;
+  top: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+  border-radius: 999px;
 }
 
 .login-sub {
@@ -954,6 +966,7 @@ button:disabled {
   margin-bottom: 12px;
   object-fit: contain;
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.45));
+  animation: glowPulse 4s ease-in-out infinite;
 }
 
 .splash-title {
