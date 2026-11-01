@@ -377,8 +377,10 @@ const btnCancelRegister = document.getElementById('btnCancelRegister');
 const btnConfirmRegister = document.getElementById('btnConfirmRegister');
 
 const modalStockWarning = document.getElementById('modalStockWarning');
+const modalNetwork = document.getElementById('modalNetwork');
 const stockWarningItemName = document.getElementById('stockWarningItemName');
 const btnCancelStockOverride = document.getElementById('btnCancelStockOverride');
+const btnNetworkOk = document.getElementById('btnNetworkOk');
 const btnConfirmStockOverride = document.getElementById('btnConfirmStockOverride');
 
 const modalEquipment = document.getElementById('modalEquipment');
@@ -579,7 +581,7 @@ async function flushQueue(showToasts = false) {
         return false;
     }
     if (pendingQueue.length === 0) {
-        setSyncStatus('Google Sheets Synced', true);
+        setSyncStatus('Server Synced', true);
         return true;
     }
 
@@ -594,7 +596,7 @@ async function flushQueue(showToasts = false) {
         });
         if (!res.ok) throw new Error('bad response');
         const result = await res.json();
-        logSync(`Script confirmed: applied ${result.applied} action(s).`, 'ok');
+        logSync(`Server confirmed: applied ${result.applied} action(s).`, 'ok');
     } catch (err) {
         // Apps Script blocks CORS preflight — best-effort opaque send, then verify by reading the sheet back
         try {
@@ -604,7 +606,7 @@ async function flushQueue(showToasts = false) {
                 headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                 body
             });
-            logSync('POST sent (opaque response). Verifying against the sheet...', 'warn');
+            logSync('POST sent (opaque response). Verifying against the server...', 'warn');
         } catch (fallbackErr) {
             logSync(`POST failed: ${fallbackErr.message}`, 'err');
             setSyncStatus(`Offline — ${pendingQueue.length} change(s) queued`, false);
@@ -631,7 +633,7 @@ async function readJsonResponse(res) {
 }
 
 function logHtmlCause() {
-    logSync('Cause: the endpoint returned HTML, not JSON. Check that the deployment Access is "Anyone" (not "Anyone with access to the data") and that the URL ends in /exec — not the /edit URL.', 'warn');
+    logSync('Cause: the server returned HTML, not JSON. Check that the deployment Access is "Anyone" (not "Anyone with access to the data") and that the URL ends in /exec — not the /edit URL.', 'warn');
 }
 
 // Check whether each queued action is present in the sheet. This is the only
@@ -639,7 +641,7 @@ function logHtmlCause() {
 async function verifyQueue(showToasts = true) {
     if (!settings.webAppUrl) return false;
     if (pendingQueue.length === 0) {
-        setSyncStatus('Google Sheets Synced', true);
+        setSyncStatus('Server Synced', true);
         return true;
     }
 
@@ -676,16 +678,16 @@ async function verifyQueue(showToasts = true) {
             pendingQueue = [];
             lastSync = new Date().toISOString();
             saveData();
-            setSyncStatus('Google Sheets Synced', true);
-            logSync(`Verified ${count} action(s) present in the sheet.`, 'ok');
-            if (showToasts) showToast(`Confirmed: ${count} change(s) reached the Google Sheet.`, 'success');
+            setSyncStatus('Server Synced', true);
+            logSync(`Verified ${count} action(s) present on the server.`, 'ok');
+            if (showToasts) showToast(`Confirmed: ${count} change(s) reached the server.`, 'success');
             return true;
         }
 
-        logSync(`Not confirmed: ${missing.length} action(s) missing from the sheet.`, 'err');
+        logSync(`Not confirmed: ${missing.length} action(s) missing from the server.`, 'err');
         logSync('Most likely cause: the deployed Apps Script is an older version. Redeploy (Deploy > Manage deployments > Edit > New version) with the code in Settings, then click Verify.', 'warn');
         setSyncStatus(`${missing.length} change(s) not confirmed`, false);
-        if (showToasts) showToast(`${missing.length} change(s) did not reach the sheet — redeploy the Apps Script as a NEW version.`, 'error');
+        if (showToasts) showToast(`${missing.length} change(s) did not reach the server — redeploy the server code as a NEW version.`, 'error');
         return false;
     } catch (err) {
         if (err.htmlPage) {
@@ -763,8 +765,8 @@ async function syncFromCloud(showToasts = true) {
     }
 
     try {
-        setSyncStatus('Syncing with Google Sheets...', false);
-        if (showToasts) showToast('Connecting to Google Sheet...', 'info');
+        setSyncStatus('Syncing with server...', false);
+        if (showToasts) showToast('Connecting to server...', 'info');
 
         const res = await fetch(settings.webAppUrl);
         if (!res.ok) throw new Error('Network response was not ok');
@@ -804,7 +806,7 @@ async function syncFromCloud(showToasts = true) {
     } catch (err) {
         console.error('Cloud Sync Error:', err);
         setSyncStatus(`Offline — ${pendingQueue.length} change(s) queued`, false);
-        if (showToasts) showToast('Could not reach Google Sheet. Working offline — changes are queued.', 'error');
+        if (showToasts) showToast('Could not reach the server. Working offline — changes are queued.', 'error');
     }
 }
 
@@ -845,6 +847,61 @@ function setSyncStatus(text, isOnline) {
 }
 
 // --- TOAST NOTIFICATION SYSTEM ---
+// --- SUBTLE SOUND EFFECTS (Web Audio, no asset files) ---
+let audioCtx = null;
+let soundMuted = false;
+
+function soundEnabled() {
+    return !settings.soundMuted && !soundMuted;
+}
+function getAudioCtx() {
+    if (!audioCtx) {
+        try {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (err) {
+            return null;
+        }
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    return audioCtx;
+}
+
+// Short, quiet synthesized cues: success = rising two-note chime,
+// notice = single soft tone, error = low descending pair.
+function playSound(kind) {
+    if (!soundEnabled()) return;
+    const ctx = getAudioCtx();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const notes = {
+        success: [[784, 0.0, 0.16], [1046.5, 0.14, 0.22]],
+        notice: [[659.25, 0.0, 0.22]],
+        error: [[392, 0.0, 0.18], [293.66, 0.16, 0.26]],
+        override: [[880, 0.0, 0.12], [1174.7, 0.10, 0.14], [1318.5, 0.20, 0.18]]
+    }[kind] || [[659.25, 0.0, 0.2]];
+
+    const master = ctx.createGain();
+    master.gain.value = 0.12; // keep it subtle
+    master.connect(ctx.destination);
+
+    notes.forEach(function (n) {
+        const freq = n[0], start = n[1], dur = n[2];
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + start);
+        // Soft attack/release envelope so nothing clicks
+        gain.gain.setValueAtTime(0, now + start);
+        gain.gain.linearRampToValueAtTime(0.9, now + start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + start + dur);
+        osc.connect(gain);
+        gain.connect(master);
+        osc.start(now + start);
+        osc.stop(now + start + dur + 0.02);
+    });
+}
+
 function showToast(message, type = 'success') {
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
@@ -855,6 +912,8 @@ function showToast(message, type = 'success') {
 
     toast.innerHTML = `<span>${icon}</span> <span>${message}</span>`;
     toastContainer.appendChild(toast);
+
+    playSound(type === 'success' ? 'success' : type === 'error' ? 'error' : 'notice');
 
     setTimeout(() => {
         toast.style.opacity = '0';
@@ -1469,6 +1528,10 @@ btnConfirmRegister.addEventListener('click', () => {
 });
 
 // Stock Override Prompt Modal
+btnNetworkOk.addEventListener('click', () => {
+    modalNetwork.classList.remove('active');
+});
+
 btnCancelStockOverride.addEventListener('click', () => {
     modalStockWarning.classList.remove('active');
     pendingCheckoutData = null;
@@ -1487,6 +1550,7 @@ btnConfirmStockOverride.addEventListener('click', () => {
         requestOverride('Stock limit reached. Enter a Developer or Staff code and password to override.', finish);
         return;
     }
+    playSound('override');
 
     modalStockWarning.classList.remove('active');
     finalizeCheckout();
@@ -1712,6 +1776,17 @@ function loadSettingsInputs() {
     if (auto) auto.checked = !!settings.autoBlacklistOverdue;
     const skip = document.getElementById('skipWeekends');
     if (skip) skip.checked = settings.skipWeekends !== false;
+    const sound = document.getElementById('soundToggle');
+    if (sound) sound.value = settings.soundMuted ? 'off' : 'on';
+}
+
+const soundToggle = document.getElementById('soundToggle');
+if (soundToggle) {
+    soundToggle.addEventListener('change', () => {
+        settings.soundMuted = soundToggle.value === 'off';
+        saveData();
+        if (!settings.soundMuted) playSound('success');
+    });
 }
 
 const autoBlacklistToggle = document.getElementById('autoBlacklistOverdue');
@@ -1755,7 +1830,7 @@ if (btnClearQueue) {
         pendingQueue = [];
         saveData();
         renderQueueStatus();
-        setSyncStatus('Queue cleared — re-sync to compare against the sheet', false);
+        setSyncStatus('Queue cleared — re-sync to compare against the server', false);
         logSync(`Dropped ${count} unconfirmable queue entry(ies).`, 'warn');
         showToast(`Queue cleared (${count}). Local data now matches the sheet on the next sync.`, 'success');
     });
@@ -1841,9 +1916,10 @@ btnFlushQueue.addEventListener('click', () => {
 
 // Reconnect handling: push the queue the moment the connection returns
 window.addEventListener('online', () => {
+    if (modalNetwork) modalNetwork.classList.remove('active');
     renderQueueStatus();
     if (settings.webAppUrl) {
-        showToast('Connection restored — pushing queued changes to Google Sheets...', 'info');
+        showToast('Connection restored — pushing queued changes to the server...', 'info');
         syncFromCloud(true);
     } else {
         setSyncStatus('Local Storage Mode', false);
@@ -1853,6 +1929,8 @@ window.addEventListener('online', () => {
 window.addEventListener('offline', () => {
     renderQueueStatus();
     setSyncStatus(`Offline — ${pendingQueue.length} change(s) queued`, false);
+    if (modalNetwork) modalNetwork.classList.add('active');
+    playSound('notice');
     showToast('You are offline. Changes are saved locally and will sync later.', 'warning');
 });
 

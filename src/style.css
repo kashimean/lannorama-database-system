@@ -27,6 +27,7 @@
   --radius-md: 10px;
   --radius-lg: 16px;
   --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 18px 45px -12px rgba(0, 0, 0, 0.55), 0 10px 20px -10px rgba(198, 1, 31, 0.35);
   --transition: all 0.2s ease-in-out;
 }
 
@@ -50,12 +51,13 @@ body {
 
 /* Header */
 header {
-  background-color: #1e293b;
+  background: linear-gradient(135deg, #241013 0%, #2a1114 55%, #1f0d10 100%);
   border-bottom: 1px solid var(--border-color);
   padding: 14px 24px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
 }
 
 .brand {
@@ -74,6 +76,7 @@ header {
   justify-content: center;
   font-size: 20px;
   color: white;
+  box-shadow: 0 4px 14px rgba(198, 1, 31, 0.45);
 }
 
 .brand-logo {
@@ -126,7 +129,7 @@ header {
 /* Sidebar Navigation */
 sidebar {
   width: 230px;
-  background-color: #0f172a;
+  background: linear-gradient(180deg, #170809 0%, #1a0a0c 60%, #140607 100%);
   border-right: 1px solid var(--border-color);
   padding: 20px 12px;
   display: flex;
@@ -154,9 +157,9 @@ sidebar {
 }
 
 .nav-item.active {
-  background-color: var(--primary);
+  background: linear-gradient(135deg, var(--primary), #9d0118);
   color: white;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+  box-shadow: 0 4px 14px rgba(198, 1, 31, 0.45);
 }
 
 .nav-item .badge {
@@ -785,19 +788,32 @@ button:disabled {
   display: none;
   position: fixed;
   inset: 0;
-  background: var(--bg-dark);
+  background: linear-gradient(125deg, #120405 0%, #c6011f 30%, #cfb154 55%, #1a0a0c 80%, #0a0203 100%);
+  background-size: 400% 400%;
+  animation: gradientShift 14s ease infinite;
   align-items: center;
   justify-content: center;
   z-index: 1000;
 }
 
+.login-gate::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, rgba(10, 2, 3, 0.6) 0%, rgba(10, 2, 3, 0.9) 75%);
+}
+
 .login-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius);
-  padding: 32px 36px;
-  width: 380px;
-  box-shadow: 0 20px 50px rgba(0,0,0,.45);
+  position: relative;
+  z-index: 1;
+  background: rgba(26, 10, 12, 0.82);
+  border: 1px solid rgba(207, 177, 84, 0.35);
+  border-radius: var(--radius-lg);
+  padding: 34px 38px;
+  width: 400px;
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(12px);
+  animation: splashPop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 .login-title {
@@ -885,10 +901,9 @@ button:disabled {
 .splash {
   position: fixed;
   inset: 0;
-  background: #1a0a0c;
-  background-image:
-    radial-gradient(circle at 50% 38%, rgba(198, 1, 31, 0.35) 0%, rgba(26, 10, 12, 0) 60%),
-    linear-gradient(135deg, #1a0a0c 0%, #241013 50%, #1a0a0c 100%);
+  background: linear-gradient(125deg, #120405 0%, #c6011f 30%, #cfb154 55%, #1a0a0c 80%, #0a0203 100%);
+  background-size: 400% 400%;
+  animation: gradientShift 14s ease infinite;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -896,10 +911,24 @@ button:disabled {
   transition: opacity 0.5s ease;
 }
 
-.splash.fade-out { opacity: 0; }
+/* Dark scrim so the title stays readable over the moving gradient */
+.splash::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, rgba(10, 2, 3, 0.55) 0%, rgba(10, 2, 3, 0.88) 75%);
+}
 
 .splash-inner {
+  position: relative;
+  z-index: 1;
   text-align: center;
+  padding: 40px 48px;
+  background: rgba(12, 4, 5, 0.55);
+  border: 1px solid rgba(207, 177, 84, 0.28);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-lg);
   animation: splashPop 0.7s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
@@ -909,13 +938,14 @@ button:disabled {
   animation: splashSpin 1.6s ease-in-out infinite;
 }
 
+.splash.fade-out { opacity: 0; }
+
 .splash-logo {
   width: 120px;
   height: 120px;
   margin-bottom: 14px;
   object-fit: contain;
-  animation: splashPop 0.7s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  filter: drop-shadow(0 6px 18px rgba(198, 1, 31, 0.35));
+  animation: splashPop 0.7s cubic-bezier(0.175, 0.885, 0.32, 1.275), glowPulse 4s ease-in-out infinite;
 }
 
 .login-logo {
@@ -973,6 +1003,17 @@ button:disabled {
 @keyframes splashLoad {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(250%); }
+}
+
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes glowPulse {
+  0%, 100% { filter: drop-shadow(0 6px 18px rgba(198, 1, 31, 0.45)); }
+  50% { filter: drop-shadow(0 8px 26px rgba(207, 177, 84, 0.6)); }
 }
 
 /* WELCOME FLASH */

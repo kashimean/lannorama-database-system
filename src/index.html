@@ -392,18 +392,25 @@
                 <div class="panel" data-min-role="staff">
                     <div class="panel-header">
                         <div class="panel-title">
-                            <span>☁️</span> Google Sheets Live Cloud Storage Integration
+                            <span>☁️</span> Live Server Cloud Storage Integration
                         </div>
                     </div>
 
                     <p style="color: var(--text-muted); font-size: 0.92rem; margin-bottom: 20px;">
-                        By connecting your Google Sheet Web App URL below, <strong>all equipment names, student rosters, and checkout logs will sync dynamically from your spreadsheet</strong>. You will never need to edit code to update options!
+                        By connecting your Server URL below, <strong>all equipment names, student rosters, and checkout logs will sync dynamically from the server</strong>. You will never need to edit code to update options!
                     </p>
 
                     <div class="form-grid">
                         <div class="form-group full-width">
-                            <label for="googleWebAppUrlInput">Google Apps Script Web App URL</label>
+                            <label for="googleWebAppUrlInput">Server URL</label>
                             <input type="text" id="googleWebAppUrlInput" placeholder="https://script.google.com/macros/s/AKfycbx.../exec">
+                        </div>
+                        <div class="form-group full-width">
+                            <label for="soundToggle">Sound Effects</label>
+                            <select id="soundToggle">
+                                <option value="on">On (subtle cues for success / notice / error)</option>
+                                <option value="off">Off (silent)</option>
+                            </select>
                         </div>
                     </div>
 
@@ -421,7 +428,7 @@
                 <div class="panel" data-min-role="staff">
                     <div class="panel-header">
                         <div class="panel-title">
-                            <span>📡</span> Offline Queue & Sync Status
+                            <span>📡</span> Offline Queue & Server Sync Status
                         </div>
                         <button class="btn btn-primary btn-sm" id="btnFlushQueue">
                             📤 Push Pending Changes
@@ -429,7 +436,7 @@
                     </div>
 
                     <p style="color: var(--text-muted); font-size: 0.92rem; margin-bottom: 18px;">
-                        Every checkout, student registration, and inventory edit is <strong>saved locally first</strong>. If Google Sheets can't be reached, changes are held in this queue and automatically pushed the moment the connection returns.
+                        Every checkout, student registration, and inventory edit is <strong>saved locally first</strong>. If the server can't be reached, changes are held in this queue and automatically pushed the moment the connection returns.
                     </p>
 
                     <div class="queue-summary">
@@ -453,7 +460,7 @@
 
                     <div style="margin-top: 16px; display: flex; gap: 12px;">
                         <button class="btn btn-secondary" id="btnVerifySync">
-                            🔎 Verify Changes Reached the Sheet
+                            🔎 Verify Changes Reached the Server
                         </button>
                         <button class="btn btn-secondary" id="btnClearQueue">
                             🧹 Clear Queue (drop unconfirmable entries)
@@ -535,7 +542,7 @@
                     <div style="margin-top:22px;border-top:1px solid var(--border-color);padding-top:18px;">
                         <div style="font-weight:700;margin-bottom:10px;">Access codes (Staff / TA)</div>
                         <p style="color:var(--text-muted);font-size:0.9rem;margin-bottom:12px;">
-                            Staff can check out, add equipment, view roster/blacklist and use sync + updater. TAs can only check out. Codes are stored in the cloud <code>Users</code> sheet.
+                            Staff can check out, add equipment, view roster/blacklist and use sync + updater. TAs can only check out. Codes are stored on the server in the <code>Users</code> table.
                         </p>
                         <div class="form-grid">
                             <div class="form-group">
@@ -663,6 +670,28 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" id="btnCancelStockOverride">Cancel</button>
                 <button class="btn btn-danger" id="btnConfirmStockOverride">Proceed Anyway</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: NETWORK DISCONNECT NOTICE -->
+    <div class="modal-overlay" id="modalNetwork">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 style="color: var(--warning);">📡 Network Disconnected</h3>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom: 12px;">
+                    Network is disconnected, interrupting connection to the server. Data will be stored
+                    <strong style="color: var(--text-main);">locally on your machine</strong> until the network is restored.
+                </p>
+                <p style="color: var(--text-muted); font-size: 0.9rem;">
+                    Everything you do keeps working offline — checkouts, roster edits, and blacklist changes are queued and
+                    pushed automatically once the connection returns.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" id="btnNetworkOk">Understood</button>
             </div>
         </div>
     </div>

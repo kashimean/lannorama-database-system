@@ -8,7 +8,8 @@
     "start": "electron .",
     "dist": "electron-builder",
     "dist:win": "electron-builder --win",
-    "release": "electron-builder --win --publish always"
+    "release": "electron-builder --win --publish always",
+    "build:graphics": "node scripts/build-installer-bitmaps.js"
   },
   "dependencies": {
     "electron-updater": "^6.2.4"
@@ -38,7 +39,7 @@
           ]
         }
       ],
-      "signAndEditExecutable": false
+      "signAndEditExecutable": true
     },
     "nsis": {
       "oneClick": false,
@@ -47,7 +48,12 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Lannorama Database System",
-      "artifactName": "Lannorama-Database-System-Setup-${version}.exe"
+      "artifactName": "Lannorama-Database-System-Setup-${version}.exe",
+      "installerIcon": "buildResources/icon.ico",
+      "installerHeader": "buildResources/installerHeader.bmp",
+      "installerSidebar": "buildResources/installerSidebar.bmp",
+      "uninstallerIcon": "buildResources/icon.ico",
+      "uninstallerSidebar": "buildResources/installerSidebar.bmp"
     },
     "publish": [
       {
