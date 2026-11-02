@@ -562,6 +562,7 @@ const editEquipmentId = document.getElementById('editEquipmentId');
 const equipNameInput = document.getElementById('equipNameInput');
 const equipCategorySelect = document.getElementById('equipCategorySelect');
 const equipStockInput = document.getElementById('equipStockInput');
+const equipNumberInput = document.getElementById('equipNumberInput');
 const btnOpenAddEquipment = document.getElementById('btnOpenAddEquipment');
 const btnCloseEquipModal = document.getElementById('btnCloseEquipModal');
 const btnSaveEquipment = document.getElementById('btnSaveEquipment');
@@ -1711,6 +1712,9 @@ checkoutForm.addEventListener('submit', (e) => {
         classType: selectedClass,
         equipmentId: selectedEquipId,
         equipmentName: matchedEquipment.name,
+        // Snapshot the equipment number at checkout time so the log keeps it even if
+        // the inventory record is edited or deleted later.
+        equipmentNumber: matchedEquipment.number || '',
         accessories: accessories,
         checkoutDate: formatDateStr(new Date()),
         returnDate: returnDate,
@@ -1888,6 +1892,7 @@ btnOpenAddEquipment.addEventListener('click', () => {
     equipNameInput.value = '';
     equipCategorySelect.value = 'Camera';
     equipStockInput.value = '1';
+    equipNumberInput.value = '';
     modalEquipment.classList.add('active');
 });
 
@@ -1897,6 +1902,7 @@ btnSaveEquipment.addEventListener('click', () => {
     const name = equipNameInput.value.trim();
     const category = equipCategorySelect.value;
     const stock = parseInt(equipStockInput.value) || 1;
+    const number = equipNumberInput.value.trim();
     const id = editEquipmentId.value;
 
     if (!name) {
@@ -1912,6 +1918,7 @@ btnSaveEquipment.addEventListener('click', () => {
             equipment[idx].name = name;
             equipment[idx].category = category;
             equipment[idx].stock = stock;
+            equipment[idx].number = number;
             savedItem = equipment[idx];
         }
     } else {
@@ -1920,7 +1927,8 @@ btnSaveEquipment.addEventListener('click', () => {
             id: 'eq-' + Date.now(),
             name,
             category,
-            stock
+            stock,
+            number
         };
         equipment.push(savedItem);
     }
@@ -1940,6 +1948,7 @@ function openEditEquipmentModal(id) {
     equipNameInput.value = item.name;
     equipCategorySelect.value = item.category;
     equipStockInput.value = item.stock;
+    equipNumberInput.value = item.number || '';
     modalEquipment.classList.add('active');
 }
 
