@@ -866,39 +866,124 @@ function getAudioCtx() {
     return audioCtx;
 }
 
-// Short, quiet synthesized cues: success = rising two-note chime,
-// notice = single soft tone, error = low descending pair.
+// Windows 7 / Aero style cues. The Windows sounds of that era are not plain beeps:
+// they are soft bell tones with quiet harmonic partials, a gentle low-pass so nothing
+// is harsh, and a short shimmer tail that hangs in the air. Each profile below is
+// built from that shape, synthesized entirely in Web Audio (no asset files).
+//   attack ~15ms  -> no click at the start
+//   partials      -> fundamental + 2nd/3rd/4.2nd harmonics at low level = "bell"
+//   low-pass      -> rolls off the fizz, keeps it mellow
+//   delay feedback-> the shimmer tail
+const SOUND_PROFILES = {
+    startup:    { notes: [[523.25, 0.00, 0.55], [659.25, 0.20, 0.55], [783.99, 0.40, 0.80]], gain: 0.14, bell: 0.35, lp: 2600, tail: 0.22 },
+    success:    { notes: [[659.25, 0.00, 0.38], [880.00, 0.17, 0.50]],                 gain: 0.13, bell: 0.42, lp: 3200, tail: 0.25 },
+    notice:     { notes: [[739.99, 0.00, 0.34]],                                        gain: 0.12, bell: 0.48, lp: 3000, tail: 0.28 },
+    error:      { notes: [[440.00, 0.00, 0.32], [349.23, 0.19, 0.45]],                 gain: 0.13, bell: 0.22, lp: 1800, tail: 0.18 },
+    override:   { notes: [[587.33, 0.00, 0.30], [739.99, 0.15, 0.32], [932.33, 0.30, 0.48]], gain: 0.13, bell: 0.52, lp: 3400, tail: 0.30 },
+    disconnect: { notes: [[392.00, 0.00, 0.36], [293.66, 0.21, 0.52]],                 gain: 0.12, bell: 0.18, lp: 1500, tail: 0.16 },
+    reconnect:  { notes: [[440.00, 0.00, 0.32], [587.33, 0.17, 0.36], [739.99, 0.34, 0.52]], gain: 0.12, bell: 0.40, lp: 2800, tail: 0.24 },
+    click:      { notes: [[1046.50, 0.00, 0.09]],                                       gain: 0.05, bell: 0.60, lp: 4200, tail: 0.10 }
+};
+
 function playSound(kind) {
     if (!soundEnabled()) return;
     const ctx = getAudioCtx();
     if (!ctx) return;
 
+    const profile = SOUND_PROFILES[kind] || SOUND_PROFILES.notice;
     const now = ctx.currentTime;
-    const notes = {
-        success: [[784, 0.0, 0.16], [1046.5, 0.14, 0.22]],
-        notice: [[659.25, 0.0, 0.22]],
-        error: [[392, 0.0, 0.18], [293.66, 0.16, 0.26]],
-        override: [[880, 0.0, 0.12], [1174.7, 0.10, 0.14], [1318.5, 0.20, 0.18]]
-    }[kind] || [[659.25, 0.0, 0.2]];
+
+    // Master: low-pass for the mellow Aero character, then a gentle limiter-ish gain.
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = profile.lp;
+    filter.Q.value = 0.6;
 
     const master = ctx.createGain();
-    master.gain.value = 0.12; // keep it subtle
-    master.connect(ctx.destination);
+    master.gain.value = profile.gain;
 
-    notes.forEach(function (n) {
+    // Shimmer tail: a short feedback delay gives the chime a room to ring in.
+    const tail = ctx.createDelay(0.5);
+    tail.delayTime.value = 0.11;
+    const tailGain = ctx.createGain();
+    tailGain.gain.value = profile.tail;
+    const tailFilter = ctx.createBiquadFilter();
+    tailFilter.type = 'lowpass';
+    tailFilter.frequency.value = 2200;
+
+    filter.connect(master);
+    master.connect(ctx.destination);
+    master.connect(tail);
+    tail.connect(tailFilter);
+    tailFilter.connect(tailGain);
+    tailGain.connect(tail);
+    tailGain.connect(ctx.destination);
+
+    const partials = [1, 2, 3, 4.2]; // fundamental + harmonics = bell, not beep
+    const harmonicLevel = [1.0, 0.34, 0.16, 0.07];
+
+    profile.notes.forEach(function (n) {
         const freq = n[0], start = n[1], dur = n[2];
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(freq, now + start);
-        // Soft attack/release envelope so nothing clicks
-        gain.gain.setValueAtTime(0, now + start);
-        gain.gain.linearRampToValueAtTime(0.9, now + start + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + start + dur);
-        osc.connect(gain);
-        gain.connect(master);
-        osc.start(now + start);
-        osc.stop(now + start + dur + 0.02);
+        partials.forEach(function (p, i) {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = i === 0 ? 'sine' : 'sine';
+            osc.frequency.setValueAtTime(freq * p, now + start);
+            // Very slight detune on the upper partials: makes it ring rather than buzz.
+            if (i > 0) osc.frequency.setValueAtTime(freq * p * (1 + 0.0015 * i), now + start);
+
+            const level = harmonicLevel[i] * (i === 0 ? 1 : profile.bell);
+            const t0 = now + start;
+            gain.gain.setValueAtTime(0, t0);
+            gain.gain.linearRampToValueAtTime(level, t0 + 0.015);        // soft attack, no click
+            gain.gain.exponentialRampToValueAtTime(0.0008, t0 + dur);
+            // Upper harmonics decay faster than the fundamental, like a real bell.
+            if (i > 0) gain.gain.setTargetAtTime(0, t0 + dur * 0.5, dur * 0.25);
+
+            osc.connect(gain);
+            gain.connect(filter);
+            osc.start(t0);
+            osc.stop(t0 + dur + 0.05);
+        });
+    });
+}
+
+// In-app confirm. The native confirm() is a Windows dialog — on school machines it
+// can steal focus, sit behind the window, or stall the renderer. Everything now stays
+// inside the app, in the same Aero/49ers styling as the other modals.
+function confirmDialog(message, title = 'Confirm') {
+    const overlay = document.getElementById('modalConfirm');
+    const titleEl = document.getElementById('confirmTitle');
+    const msgEl = document.getElementById('confirmMessage');
+    const okBtn = document.getElementById('btnConfirmOk');
+    const cancelBtn = document.getElementById('btnConfirmCancel');
+    if (!overlay) return Promise.resolve(false);
+
+    return new Promise((resolve) => {
+        titleEl.textContent = title;
+        msgEl.textContent = message;
+        overlay.classList.add('active');
+        playSound('notice');
+
+        const finish = (value, kind) => {
+            overlay.classList.remove('active');
+            okBtn.removeEventListener('click', onOk);
+            cancelBtn.removeEventListener('click', onCancel);
+            document.removeEventListener('keydown', onKey);
+            playSound(kind);
+            resolve(value);
+        };
+        const onOk = () => finish(true, 'success');
+        const onCancel = () => finish(false, 'click');
+        const onKey = (e) => {
+            if (e.key === 'Escape') finish(false, 'click');
+            if (e.key === 'Enter') finish(true, 'success');
+        };
+
+        okBtn.addEventListener('click', onOk);
+        cancelBtn.addEventListener('click', onCancel);
+        document.addEventListener('keydown', onKey);
+        okBtn.focus();
     });
 }
 
@@ -927,12 +1012,13 @@ function showToast(message, type = 'success') {
 navItems.forEach(item => {
     item.addEventListener('click', () => {
         const targetTab = item.getAttribute('data-tab');
-        
+
         navItems.forEach(nav => nav.classList.remove('active'));
         tabContents.forEach(content => content.classList.remove('active'));
 
         item.classList.add('active');
         document.getElementById(`tab-${targetTab}`).classList.add('active');
+        playSound('click');
     });
 });
 
@@ -1618,8 +1704,10 @@ function openEditEquipmentModal(id) {
     modalEquipment.classList.add('active');
 }
 
-function deleteEquipment(id) {
-    if (confirm('Are you sure you want to delete this equipment type?')) {
+async function deleteEquipment(id) {
+    const item = equipment.find(e => e.id === id);
+    const name = item ? item.name : 'this equipment type';
+    if (await confirmDialog(`Are you sure you want to delete ${name}?`, 'Delete Equipment')) {
         equipment = equipment.filter(e => e.id !== id);
         saveData();
         queueChange('delete_equipment', { id });
@@ -1682,8 +1770,10 @@ function openEditStudentModal(id) {
     modalStudent.classList.add('active');
 }
 
-function deleteStudent(id) {
-    if (confirm('Are you sure you want to delete this student from roster?')) {
+async function deleteStudent(id) {
+    const student = students.find(s => s.id === id);
+    const name = student ? student.name : 'this student';
+    if (await confirmDialog(`Are you sure you want to delete ${name} from the roster?`, 'Delete Student')) {
         students = students.filter(s => s.id !== id);
         saveData();
         queueChange('delete_student', { id });
@@ -1930,6 +2020,7 @@ btnFlushQueue.addEventListener('click', () => {
 window.addEventListener('online', () => {
     if (modalNetwork) modalNetwork.classList.remove('active');
     renderQueueStatus();
+    playSound('reconnect');
     if (settings.webAppUrl) {
         showToast('Connection restored — pushing queued changes to the server...', 'info');
         syncFromCloud(true);
@@ -1942,7 +2033,7 @@ window.addEventListener('offline', () => {
     renderQueueStatus();
     setSyncStatus(`Offline — ${pendingQueue.length} change(s) queued`, false);
     if (modalNetwork) modalNetwork.classList.add('active');
-    playSound('notice');
+    playSound('disconnect');
     showToast('You are offline. Changes are saved locally and will sync later.', 'warning');
 });
 
@@ -1981,8 +2072,8 @@ btnExportData.addEventListener('click', () => {
     showToast('Database backup file exported!', 'success');
 });
 
-btnLoadSampleData.addEventListener('click', () => {
-    if (confirm('Reset to default sample data? (Your current data will be overwritten)')) {
+btnLoadSampleData.addEventListener('click', async () => {
+    if (await confirmDialog('Reset to default sample data? Your current data will be overwritten.', 'Reset Database')) {
         equipment = DEFAULT_EQUIPMENT;
         students = DEFAULT_STUDENTS;
         checkouts = DEFAULT_CHECKOUTS;

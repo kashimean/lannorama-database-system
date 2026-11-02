@@ -233,6 +233,7 @@ function showWelcome(user) {
     flash.style.display = 'flex';
     flash.classList.remove('fade-out');
     void flash.offsetWidth; // restart the animation
+    if (typeof playSound === 'function') playSound('startup');
 
     setTimeout(() => {
         flash.classList.add('fade-out');
@@ -280,6 +281,7 @@ function showLoginGate(onSuccess) {
         const user = await attemptLogin(codeInput ? codeInput.value : ADMIN_CODE, pw);
         if (!user) {
             msg.textContent = 'Unknown code or incorrect password.';
+            playSound('error');
             input.select();
             return;
         }
@@ -299,6 +301,11 @@ function showLoginGate(onSuccess) {
         input.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
         if (codeInput) codeInput.addEventListener('keydown', e => { if (e.key === 'Enter') input.focus(); });
     }
+    // Always start from a clean gate: sign out must not leave the previous
+    // code/password typed in the boxes.
+    if (codeInput) codeInput.value = '';
+    input.value = '';
+    if (msg) msg.textContent = '';
     if (codeInput) codeInput.focus();
 }
 
@@ -311,5 +318,7 @@ function signOut() {
     logout();
     const splash = document.getElementById('splashScreen');
     if (splash) { splash.style.display = 'none'; splash.classList.remove('fade-out'); }
+    const welcome = document.getElementById('welcomeFlash');
+    if (welcome) { welcome.style.display = 'none'; welcome.classList.remove('fade-out'); }
     showLoginGate(applyRolePermissions);
 }
