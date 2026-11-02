@@ -194,3 +194,36 @@ no-op on the server. The rewrite adds:
 The Settings panel template (`APPS_SCRIPT_TEMPLATE`) is now generated from this same file.
 
 **Still required:** redeploy the Apps Script as a NEW version (Access must stay Anyone).
+
+## Live probe — why checkout/student edits still error (v1.0.11)
+
+Probed the deployed /exec endpoint directly:
+
+```
+students:  59 rows, 0 with a class value
+checkouts: 20 rows, 0 with studentName or checkoutDate
+POST probe -> {"status":"success","applied":1,"skipped":[]}   (write path is healthy)
+```
+
+A checkout probe with a unique marker in every field read back as:
+
+```
+{"id":"probe-2","studentName":"","classType":"","equipmentId":"","equipmentName":"",
+ "accessories":"A6","checkoutDate":"","returnDate":"","status":"S9","equipmentNumber":""}
+```
+
+Only `id`, `accessories`, `status` survived — every field that needs an alias mapping came
+back blank. That is the header-normalization gap: the sheet headers are the no-space lowercase
+variants (`studentname`, `classtype`, `equipmentid`, `checkoutdate`, `returndate`,
+`equipmentnumber`), which were not in `HEADER_ALIASES`, so `columnMap()` falls back to assumed
+canonical order and writes land in the wrong columns.
+
+Simulated the FIXED script against exactly those headers — all 10 fields round-trip correctly.
+So the fix is confirmed; the deployed version is simply older than the code in Settings.
+
+**Action required:** redeploy the Apps Script as a NEW version with the code now shown in Settings
+(v1.0.11), then click Verify. `?action=headers` reports the raw vs canonical header row per sheet
+so any remaining mismatch is named explicitly.
+
+Existing blank cells in the sheet are not retroactively filled — the fix makes reads/writes align
+going forward.
