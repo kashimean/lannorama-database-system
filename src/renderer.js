@@ -981,6 +981,9 @@ async function verifyQueue(showToasts = true) {
                     if (info.mismatched && info.mismatched.length) {
                         logSync('  sheet ' + name + ' headers not recognized: ' + info.mismatched.join(', ') + ' — rename them to ' + info.canonical.join(', '), 'err');
                     }
+                    if (info.duplicates && info.duplicates.length) {
+                        logSync('  sheet ' + name + ' has duplicate header columns (' + info.duplicates.join(', ') + ') — open ' + settings.webAppUrl + '?action=repair once to clear them', 'err');
+                    }
                 });
             }
         } catch (hdrErr) {
