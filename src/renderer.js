@@ -1174,6 +1174,7 @@ function showToast(message, type = 'success') {
     let icon = '✅';
     if (type === 'warning') icon = '⚠️';
     if (type === 'error') icon = '❌';
+    if (type === 'info') icon = 'ℹ️';
 
     toast.innerHTML = `<span>${icon}</span> <span>${message}</span>`;
     toastContainer.appendChild(toast);
