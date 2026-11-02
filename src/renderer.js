@@ -1,33 +1,68 @@
 // Digital Media Equipment Tracker - Renderer Script
 
 // --- APPS SCRIPT TEMPLATE CODE FOR GOOGLE SHEETS ---
-const APPS_SCRIPT_TEMPLATE = `const HEADERS = {
-  Equipment: ["id", "name", "category", "stock"],
+const APPS_SCRIPT_TEMPLATE = `/**
+ * Lannorama Database System — cloud backend (Google Apps Script, Web App).
+ *
+ * Deploy: Extensions > Apps Script > paste this file > Deploy > New version.
+ * Access must stay "Anyone" for the app to reach it.
+ *
+ * Sheets are created automatically on first write, or run setupSheets() once
+ * from the editor to build them all with the canonical headers.
+ *
+ * Everything is written by the ACTUAL column position of each header, never by
+ * assumed column order, so a hand-arranged sheet still works.
+ */
+
+var HEADERS = {
+  Equipment: ["id", "name", "category", "stock", "number"],
   Students: ["id", "name", "classType"],
-  Checkouts: ["id", "studentName", "classType", "equipmentId", "equipmentName", "accessories", "checkoutDate", "returnDate", "status"],
-  Auth: ["id", "key", "value"],
+  Checkouts: [
+    "id", "studentName", "classType", "equipmentId", "equipmentName",
+    "equipmentNumber", "accessories", "checkoutDate", "returnDate", "status"
+  ],
   Users: ["id", "code", "name", "level", "passwordHash"],
-  Blacklist: ["id", "studentName", "reason", "addedBy", "addedDate", "active"]
+  Blacklist: ["id", "studentName", "reason", "addedBy", "addedDate", "active"],
+  Auth: ["id", "key", "value"]
 };
 
 // Hand-pasted sheets rarely use the exact header names, so every header is
 // normalized to the canonical key. Without this, row.id is undefined and the
 // app can never confirm a change, which is what caused duplicate rows.
 var HEADER_ALIASES = {
-  "id": "id", "student id": "id", "student_id": "id", "equipment id": "id",
-  "equipment_id": "id", "checkout id": "id", "user id": "id", "record id": "id",
-  "name": "name", "student name": "studentName", "student_name": "studentName",
+  "id": "id", "record id": "id", "row id": "id",
+  "student id": "id", "student_id": "id",
+  "equipment id": "id", "equipment_id": "id",
+  "checkout id": "id", "user id": "id", "blacklist id": "id",
+  "name": "name", "full name": "name", "display name": "name",
+  "student name": "studentName", "student_name": "studentName",
   "class": "classType", "class type": "classType", "class_type": "classType",
-  "period": "classType", "period/section": "classType",
-  "category": "category", "type": "category", "stock": "stock", "count": "stock",
-  "accessories": "accessories", "notes": "accessories",
-  "checkout date": "checkoutDate", "date out": "checkoutDate",
+  "period": "classType", "period/section": "classType", "class period": "classType",
+  "category": "category", "type": "category", "item type": "category",
+  "stock": "stock", "count": "stock", "max stock": "stock", "quantity": "stock",
+  "number": "number", "equipment number": "number", "asset number": "number",
+  "serial": "number", "serial number": "number", "asset": "number", "item number": "number",
+  "accessories": "accessories", "notes": "accessories", "notes/accessories": "accessories",
+  "checkout date": "checkoutDate", "date out": "checkoutDate", "checked out": "checkoutDate",
   "return date": "returnDate", "date due": "returnDate", "due date": "returnDate",
-  "status": "status", "key": "key", "value": "value", "code": "code",
-  "level": "level", "role": "level", "password hash": "passwordHash",
-  "added by": "addedBy", "added date": "addedDate", "reason": "reason",
-  "active": "active", "equipment name": "equipmentName", "equipment": "equipmentName",
-  "equipment id": "equipmentId"
+  "returned date": "returnDate", "return status": "status", "status": "status",
+  "key": "key", "value": "value", "code": "code", "access code": "code",
+  "level": "level", "role": "level", "password hash": "passwordHash", "hash": "passwordHash",
+  "added by": "addedBy", "added date": "addedDate", "date added": "addedDate",
+  "reason": "reason", "active": "active",
+  "equipment name": "equipmentName", "equipment": "equipmentName", "item": "equipmentName"
+};
+
+// Action type -> sheet name. delete_checkout was missing before, which made
+// "Purge logs" a no-op on the server.
+var ACTION_SHEET = {
+  "equipment": "Equipment", "delete_equipment": "Equipment",
+  "student": "Students", "delete_student": "Students",
+  "checkout": "Checkouts", "delete_checkout": "Checkouts",
+  "log": "Checkouts", "delete_log": "Checkouts",
+  "user": "Users", "delete_user": "Users",
+  "blacklist": "Blacklist", "delete_blacklist": "Blacklist",
+  "auth": "Auth", "delete_auth": "Auth"
 };
 
 function normalizeHeader(h) {
@@ -35,53 +70,118 @@ function normalizeHeader(h) {
   return HEADER_ALIASES[k] || k;
 }
 
+// ------------------------------------------------------------------ GET
+
 function doGet(e) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  return ContentService.createTextOutput(JSON.stringify({
-    equipment: readSheet(ss, "Equipment"),
-    students: readSheet(ss, "Students"),
-    checkouts: readSheet(ss, "Checkouts"),
-    auth: readSheet(ss, "Auth"),
-    users: readSheet(ss, "Users"),
-    blacklist: readSheet(ss, "Blacklist")
-  })).setMimeType(ContentService.MimeType.JSON);
+  var params = e && e.parameter ? e.parameter : {};
+
+  if (params.action === "ping") {
+    return json({ status: "ok", time: new Date().toISOString(), sheets: listSheets(ss) });
+  }
+
+  if (params.action === "setup") {
+    return json({ status: "ok", created: setupSheets(ss) });
+  }
+
+  // Single sheet: ?sheet=Checkouts
+  if (params.sheet) {
+    var name = canonicalSheetName(params.sheet);
+    return json({ status: "success", sheet: name, rows: readSheet(ss, name) });
+  }
+
+  var out = {};
+  Object.keys(HEADERS).forEach(function (name) {
+    out[name.toLowerCase()] = readSheet(ss, name);
+  });
+  return json(out);
 }
+
+// ------------------------------------------------------------------ POST
 
 function doPost(e) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var payload = JSON.parse(e.postData.contents);
+
+  var payload;
+  try {
+    payload = JSON.parse(e.postData.contents);
+  } catch (err) {
+    return json({ status: "error", error: "Invalid JSON body." });
+  }
+
   var actions = payload.actions || [];
+  if (!actions.length) {
+    return json({ status: "success", applied: 0, skipped: [] });
+  }
+
+  // Two machines writing at the same time used to interleave and duplicate rows.
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(20000);
+  } catch (err) {
+    return json({ status: "error", error: "Server busy, try again." });
+  }
+
   var applied = 0;
+  var skipped = [];
 
-  actions.forEach(function (a) {
-    var sheetName = sheetForAction(a);
-    if (!sheetName) return;
+  try {
+    actions.forEach(function (a) {
+      var sheetName = sheetForAction(a);
+      if (!sheetName) {
+        skipped.push({ type: a.type, reason: "unknown action" });
+        return;
+      }
 
-    if (a.type === "assign_id") {
-      if (assignId(ss, sheetName, a.data)) applied++;
-    } else if (a.type.indexOf("delete") === 0) {
-      removeRow(ss, sheetName, a.data);
-      applied++;
-    } else {
-      upsert(ss, sheetName, a.data);
-      applied++;
-    }
-  });
+      var data = a.data || {};
+      if (a.type === "assign_id") {
+        if (assignId(ss, sheetName, data)) applied++;
+        else skipped.push({ type: a.type, id: data.id, reason: "no matching row" });
+      } else if (String(a.type).indexOf("delete") === 0) {
+        if (removeRow(ss, sheetName, data)) applied++;
+        else skipped.push({ type: a.type, id: data.id, reason: "row not found" });
+      } else {
+        upsert(ss, sheetName, data);
+        applied++;
+      }
+    });
+  } finally {
+    lock.releaseLock();
+  }
 
-  return ContentService.createTextOutput(JSON.stringify({ status: "success", applied: applied }))
-    .setMimeType(ContentService.MimeType.JSON);
+  return json({ status: "success", applied: applied, skipped: skipped });
 }
 
 function sheetForAction(a) {
-  var type = a.type;
-  if (type === "assign_id") return String((a.data && a.data.sheet) || "Students");
-  if (type === "checkout") return "Checkouts";
-  if (type === "student" || type === "delete_student") return "Students";
-  if (type === "equipment" || type === "delete_equipment") return "Equipment";
-  if (type === "auth" || type === "delete_auth") return "Auth";
-  if (type === "user" || type === "delete_user") return "Users";
-  if (type === "blacklist" || type === "delete_blacklist") return "Blacklist";
-  return null;
+  var type = String(a.type || "");
+  if (type === "assign_id") return canonicalSheetName((a.data && a.data.sheet) || "Students");
+  return ACTION_SHEET[type] || null;
+}
+
+function canonicalSheetName(name) {
+  var k = String(name || "").toLowerCase().trim();
+  var map = {
+    equipment: "Equipment", gear: "Equipment",
+    students: "Students", student: "Students", roster: "Students",
+    checkouts: "Checkouts", checkout: "Checkouts", logs: "Checkouts", log: "Checkouts",
+    users: "Users", user: "Users",
+    blacklist: "Blacklist",
+    auth: "Auth", settings: "Auth"
+  };
+  return map[k] || null;
+}
+
+// ------------------------------------------------------------------ helpers
+
+function json(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function listSheets(ss) {
+  return Object.keys(HEADERS).map(function (name) {
+    return { name: name, rows: readSheet(ss, name).length };
+  });
 }
 
 function readSheet(ss, name) {
@@ -89,6 +189,7 @@ function readSheet(ss, name) {
   if (!sheet) return [];
   var data = sheet.getDataRange().getValues();
   if (data.length <= 1) return [];
+
   var headers = data[0].map(normalizeHeader);
   var rows = [];
   for (var i = 1; i < data.length; i++) {
@@ -99,59 +200,120 @@ function readSheet(ss, name) {
   return rows;
 }
 
+// Create the sheet if missing, and add any canonical column the sheet does not
+// have yet (older sheets were built before equipmentNumber existed).
 function getOrCreateSheet(ss, name) {
   var sheet = ss.getSheetByName(name);
   if (!sheet) {
     sheet = ss.insertSheet(name);
     sheet.appendRow(HEADERS[name]);
+    return sheet;
+  }
+
+  var headers = headerRow(sheet);
+  var canonical = HEADERS[name];
+  for (var i = 0; i < canonical.length; i++) {
+    if (headers.indexOf(canonical[i]) !== -1) continue;
+    sheet.getRange(1, headers.length + 1).setValue(canonical[i]);
+    headers.push(canonical[i]);
   }
   return sheet;
+}
+
+// Read the actual header row as canonical keys.
+function headerRow(sheet) {
+  var lastCol = sheet.getLastColumn();
+  if (!lastCol) return [];
+  return sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(normalizeHeader);
+}
+
+// Run once from the editor to create any missing sheet and repair its header row.
+// This never deletes data — it only writes headers and freezes row 1.
+function setupSheets(ss) {
+  ss = ss || SpreadsheetApp.getActiveSpreadsheet();
+  var created = [];
+  Object.keys(HEADERS).forEach(function (name) {
+    var sheet = ss.getSheetByName(name);
+    if (!sheet) {
+      sheet = ss.insertSheet(name);
+      created.push(name);
+    }
+    if (sheet.getLastRow() === 0) {
+      sheet.getRange(1, 1, 1, HEADERS[name].length).setValues([HEADERS[name]]);
+    }
+    sheet.setFrozenRows(1);
+  });
+  return created;
+}
+
+// Column position of each canonical header, based on the sheet's real header row.
+function columnMap(sheet, name) {
+  var headers = headerRow(sheet);
+  var colOf = {};
+  HEADERS[name].forEach(function (h, i) {
+    var idx = headers.indexOf(h);
+    colOf[h] = idx === -1 ? i : idx;
+  });
+  return colOf;
 }
 
 function upsert(ss, name, record) {
   var sheet = getOrCreateSheet(ss, name);
   var values = sheet.getDataRange().getValues();
+  if (values.length === 0) {
+    sheet.appendRow(HEADERS[name]);
+    values = sheet.getDataRange().getValues();
+  }
+
   var canonical = HEADERS[name];
-  var headers = values[0].map(normalizeHeader);
-
-  // Write by the actual column position of each canonical header. Assuming
-  // canonical order corrupts data on sheets whose columns are arranged
-  // differently (e.g. name before id).
-  var colOf = {};
-  canonical.forEach(function (h) {
-    var idx = headers.indexOf(h);
-    colOf[h] = idx === -1 ? canonical.indexOf(h) : idx;
-  });
-
+  var colOf = columnMap(sheet, name);
   var idCol = colOf["id"];
-  var rowArr = canonical.map(function (h) { return record[h] !== undefined ? record[h] : ""; });
+  var width = headerRow(sheet).length || canonical.length;
 
   for (var r = 1; r < values.length; r++) {
     if (String(values[r][idCol]).trim() === String(record.id).trim()) {
       var out = [];
-      canonical.forEach(function (h) { out[colOf[h]] = record[h] !== undefined ? record[h] : ""; });
-      sheet.getRange(r + 1, 1, 1, canonical.length).setValues([out]);
+      canonical.forEach(function (h) { out[colOf[h]] = valueOf(record, h); });
+      sheet.getRange(r + 1, 1, 1, width).setValues([out]);
       return;
     }
   }
+
+  var rowArr = [];
+  canonical.forEach(function (h) { rowArr[colOf[h]] = valueOf(record, h); });
   sheet.appendRow(rowArr);
 }
 
-// Write an id into the row that already exists (a hand-imported row with a
-// blank id) instead of appending a duplicate.
+function valueOf(record, key) {
+  var v = record[key];
+  if (v === undefined || v === null) return "";
+  return v;
+}
+
+// Write an id into a row that already exists (a hand-imported row with a blank
+// id) instead of appending a duplicate.
 function assignId(ss, name, data) {
   var sheet = getOrCreateSheet(ss, name);
   var values = sheet.getDataRange().getValues();
-  var headers = values[0].map(normalizeHeader);
+  if (values.length <= 1) return false;
+  var headers = headerRow(sheet);
   var idCol = headers.indexOf("id");
-  var nameCol = headers.indexOf("name");
   if (idCol === -1) return false;
+
+  // Match on whichever name-like column the record carries.
+  var matchKeys = ["name", "code", "studentName"];
+  var matchCols = matchKeys.map(function (k) { return headers.indexOf(k); });
 
   for (var r = 1; r < values.length; r++) {
     if (String(values[r][idCol]).trim()) continue;
-    if (nameCol >= 0 && String(values[r][nameCol]).trim() === String(data.name).trim()) {
-      sheet.getRange(r + 1, idCol + 1).setValue(data.id);
-      return true;
+    for (var c = 0; c < matchCols.length; c++) {
+      if (matchCols[c] < 0) continue;
+      var cell = String(values[r][matchCols[c]]).trim();
+      var want = String(data.name || data.code || data.studentName || "").trim();
+      if (cell && cell === want) {
+        sheet.getRange(r + 1, idCol + 1).setValue(data.id);
+        return true;
+      }
     }
   }
   return false;
@@ -160,21 +322,32 @@ function assignId(ss, name, data) {
 function removeRow(ss, name, record) {
   var sheet = getOrCreateSheet(ss, name);
   var values = sheet.getDataRange().getValues();
-  var headers = values[0].map(normalizeHeader);
+  if (values.length <= 1) return false;
+  var headers = headerRow(sheet);
   var idCol = headers.indexOf("id");
-  var nameCol = headers.indexOf("name");
 
   for (var r = 1; r < values.length; r++) {
     if (record.id && String(values[r][idCol]).trim() === String(record.id).trim()) {
       sheet.deleteRow(r + 1);
-      return;
-    }
-    // Fallback for rows that never had an id: match on the name.
-    if (!record.id && nameCol >= 0 && String(values[r][nameCol]).trim() === String(record.name).trim()) {
-      sheet.deleteRow(r + 1);
-      return;
+      return true;
     }
   }
+
+  // Fallback for rows that never had an id: match on the name-like column.
+  if (!record.id) {
+    var want = String(record.name || record.code || record.studentName || "").trim();
+    if (!want) return false;
+    for (var c = 0; c < headers.length; c++) {
+      if (headers[c] !== "name" && headers[c] !== "code" && headers[c] !== "studentName") continue;
+      for (var r = 1; r < values.length; r++) {
+        if (String(values[r][c]).trim() === want) {
+          sheet.deleteRow(r + 1);
+          return true;
+        }
+      }
+    }
+  }
+  return false;
 }`;
 
 // --- INITIAL DEFAULT DATA ---
@@ -357,7 +530,7 @@ const activeBadgeCount = document.getElementById('activeBadgeCount');
 // Form Elements
 const checkoutForm = document.getElementById('checkoutForm');
 const studentNameInput = document.getElementById('studentNameInput');
-const studentList = document.getElementById('studentList');
+const studentSuggestions = document.getElementById('studentSuggestions');
 const classTypeSelect = document.getElementById('classTypeSelect');
 const equipmentSelect = document.getElementById('equipmentSelect');
 const returnDateInput = document.getElementById('returnDateInput');
@@ -434,6 +607,9 @@ const rosterTableBody = document.getElementById('rosterTableBody');
 const searchActiveInput = document.getElementById('searchActiveInput');
 const searchStudentInput = document.getElementById('searchStudentInput');
 const blacklistTableBody = document.getElementById('blacklistTableBody');
+const logsTableBody = document.getElementById('logsTableBody');
+const searchLogInput = document.getElementById('searchLogInput');
+if (searchLogInput) searchLogInput.addEventListener('input', renderLogsTable);
 
 // Toast Container
 const toastContainer = document.getElementById('toast-container');
@@ -477,7 +653,9 @@ function normalizeRow(row, kind, idx) {
             id: pick(['id', 'ID']) || systemId('equipment'),
             name: pick(['name', 'Name', 'Equipment', 'Equipment Name']) || 'Unnamed Gear',
             category: pick(['category', 'Category']) || 'Camera',
-            stock: parseInt(pick(['stock', 'Stock', 'Max Stock'])) || 1
+            stock: parseInt(pick(['stock', 'Stock', 'Max Stock'])) || 1,
+            // Optional asset/serial number, shown in Logs as "Equipment number".
+            number: pick(['number', 'Number', 'Equipment Number', 'Asset', 'Asset Number', 'Serial'])
         };
     }
 
@@ -517,6 +695,7 @@ function normalizeRow(row, kind, idx) {
         classType: pick(['classType', 'Class', 'Class Type']),
         equipmentId: pick(['equipmentId', 'Equipment ID']),
         equipmentName: pick(['equipmentName', 'Equipment Name', 'Equipment']),
+        equipmentNumber: pick(['equipmentNumber', 'Equipment Number', 'Number', 'Asset Number', 'Serial']),
         accessories: pick(['accessories', 'Accessories', 'Notes']),
         checkoutDate: pick(['checkoutDate', 'Checkout Date', 'Date Out']),
         returnDate: pick(['returnDate', 'Return Date', 'Date Due']),
@@ -1134,7 +1313,42 @@ studentNameInput.addEventListener('input', () => {
     } else {
         classTypeSelect.value = '';
     }
+    renderStudentSuggestions();
 });
+
+studentNameInput.addEventListener('focus', () => renderStudentSuggestions());
+
+// Close the suggestion panel, but allow a click on an item to land first.
+studentNameInput.addEventListener('blur', () => {
+    setTimeout(() => { if (studentSuggestions) studentSuggestions.classList.remove('open'); }, 150);
+});
+
+// In-app suggestion panel. A native <datalist> popup is drawn by Chromium on a white
+// background, which made white text unreadable — so suggestions are rendered here.
+function renderStudentSuggestions() {
+    if (!studentSuggestions) return;
+    const q = studentNameInput.value.trim().toLowerCase();
+    const matches = students.filter(s => !q || s.name.toLowerCase().includes(q)).slice(0, 12);
+
+    studentSuggestions.innerHTML = '';
+    if (matches.length === 0) {
+        studentSuggestions.classList.remove('open');
+        return;
+    }
+
+    matches.forEach(s => {
+        const row = document.createElement('div');
+        row.className = 'autocomplete-item' + (isBlacklisted(s.name) ? ' blacklisted' : '');
+        row.innerHTML = `<span>${escapeHtml(s.name)}</span><span class="ac-class">${escapeHtml(s.classType || '—')}</span>`;
+        row.addEventListener('click', () => {
+            studentNameInput.value = s.name;
+            if (s.classType) classTypeSelect.value = s.classType;
+            studentSuggestions.classList.remove('open');
+        });
+        studentSuggestions.appendChild(row);
+    });
+    studentSuggestions.classList.add('open');
+}
 
 // --- RENDER FUNCTIONS ---
 function refreshUI() {
@@ -1145,6 +1359,7 @@ function refreshUI() {
     renderInventoryTable();
     renderRosterTable();
     renderBlacklistTable();
+    renderLogsTable();
     renderUserTable();
     loadSettingsInputs();
 }
@@ -1166,13 +1381,7 @@ function renderStats() {
 }
 
 function populateStudentDatalist() {
-    studentList.innerHTML = '';
-    students.forEach(s => {
-        const option = document.createElement('option');
-        option.value = s.name;
-        option.label = s.classType;
-        studentList.appendChild(option);
-    });
+    renderStudentSuggestions();
 }
 
 function getEquipmentActiveCount(equipId) {
@@ -1479,7 +1688,10 @@ checkoutForm.addEventListener('submit', (e) => {
     e.preventDefault();
 
     const typedName = studentNameInput.value.trim();
-    const selectedClass = classTypeSelect.value;
+    // The class used for THIS checkout. If the form is left blank, fall back to the
+    // student's roster class, but the value actually used here is what gets recorded.
+    const rosterStudent = students.find(s => s.name.toLowerCase() === typedName.toLowerCase());
+    const selectedClass = classTypeSelect.value || (rosterStudent && rosterStudent.classType) || '';
     const selectedEquipId = equipmentSelect.value;
     const returnDate = returnDateInput.value;
     const accessories = accessoriesInput.value.trim();
@@ -1516,7 +1728,24 @@ checkoutForm.addEventListener('submit', (e) => {
             requestOverride(`${reason} Enter a Developer or Staff code and password to override.`, () => proceedCheckout(data));
             return;
         }
-        showToast(reason + ' Overridden by ' + displayNameFor(sessionUser) + '.', 'warning');
+        // Warn FIRST, then require an explicit confirmation before the override is used.
+        // Previously a Staff/Developer session silently overrode and checked out.
+        showToast(reason, 'error');
+        playSound('error');
+        const data = pendingCheckoutData;
+        confirmDialog(
+            `${reason} Proceed with the override and complete this checkout?`,
+            'Blacklist Override'
+        ).then(ok => {
+            if (!ok) {
+                showToast('Override cancelled — checkout not completed.', 'warning');
+                return;
+            }
+            showToast(reason + ' Overridden by ' + displayNameFor(sessionUser) + '.', 'warning');
+            playSound('override');
+            proceedCheckout(data);
+        });
+        return;
     }
 
     // 1. Check if student is registered in database
@@ -1574,6 +1803,16 @@ function finalizeCheckout() {
     };
 
     checkouts.unshift(newCheckout);
+
+    // The class recorded on the checkout is authoritative for that checkout. Only fill in
+    // the roster when the student has no class yet — never overwrite a student's existing
+    // class with the class used for one checkout.
+    const rosterStudent = students.find(s => s.name.toLowerCase() === newCheckout.studentName.toLowerCase());
+    if (rosterStudent && !rosterStudent.classType && newCheckout.classType) {
+        rosterStudent.classType = newCheckout.classType;
+        queueChange('student', rosterStudent);
+    }
+
     saveData();
     queueChange('checkout', newCheckout);
 
@@ -2083,6 +2322,116 @@ btnLoadSampleData.addEventListener('click', async () => {
 });
 
 // Helper String Escaper
+function renderLogsTable() {
+    if (!logsTableBody) return;
+    logsTableBody.innerHTML = '';
+    const q = (searchLogInput ? searchLogInput.value : '').trim().toLowerCase();
+    const rows = checkouts.filter(c =>
+        !q ||
+        String(c.studentName).toLowerCase().includes(q) ||
+        String(c.equipmentName).toLowerCase().includes(q) ||
+        String(c.equipmentNumber || '').toLowerCase().includes(q) ||
+        String(c.status).toLowerCase().includes(q)
+    );
+
+    if (rows.length === 0) {
+        logsTableBody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">No logs found.</td></tr>';
+        return;
+    }
+
+    rows.forEach(c => {
+        // Equipment number: the checkout's own recorded number, else the equipment record's.
+        const eq = equipment.find(e => e.id === c.equipmentId || String(e.name).toLowerCase() === String(c.equipmentName).toLowerCase());
+        const number = c.equipmentNumber || (eq && eq.number) || '—';
+        const status = c.status === 'active' ? checkoutStatus(c) : c.status;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><strong>${escapeHtml(c.studentName)}</strong></td>
+            <td>${escapeHtml(c.equipmentName)}</td>
+            <td>${escapeHtml(number)}</td>
+            <td>${escapeHtml(c.checkoutDate)}</td>
+            <td>${escapeHtml(c.returnDate)}</td>
+            <td><span class="badge-pill ${c.status === 'active' ? 'badge-active' : 'badge-returned'}">${escapeHtml(status)}</span></td>
+        `;
+        logsTableBody.appendChild(tr);
+    });
+}
+
+// Printable logs: a plain black-on-white view (no theme, no glass) so it prints cleanly.
+function buildPrintableLogs() {
+    const area = document.getElementById('printArea');
+    if (!area) return;
+    const rows = checkouts.slice().sort((a, b) => String(a.checkoutDate).localeCompare(String(b.checkoutDate)));
+    area.innerHTML = `
+        <h1>Checkout Logs — Lannorama Database System</h1>
+        <p>Printed ${new Date().toLocaleString()} — ${rows.length} record(s)</p>
+        <table>
+            <thead><tr>
+                <th>Student Name</th><th>Equipment Type</th><th>Equipment Number</th>
+                <th>Checkout Date</th><th>Return Date</th><th>Status</th>
+            </tr></thead>
+            <tbody>
+                ${rows.map(c => {
+                    const eq = equipment.find(e => e.id === c.equipmentId || String(e.name).toLowerCase() === String(c.equipmentName).toLowerCase());
+                    const number = c.equipmentNumber || (eq && eq.number) || '';
+                    const status = c.status === 'active' ? checkoutStatus(c) : c.status;
+                    return `<tr><td>${escapeHtml(c.studentName)}</td><td>${escapeHtml(c.equipmentName)}</td><td>${escapeHtml(number)}</td><td>${escapeHtml(c.checkoutDate)}</td><td>${escapeHtml(c.returnDate)}</td><td>${escapeHtml(status)}</td></tr>`;
+                }).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+function purgeLogs(monthFilter) {
+    const now = new Date();
+    let targets = checkouts;
+    let label = 'all logs';
+    if (monthFilter === 'lastMonth') {
+        const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const pm = prev.getMonth(), py = prev.getFullYear();
+        targets = checkouts.filter(c => {
+            const d = new Date(c.checkoutDate);
+            return !isNaN(d) && d.getMonth() === pm && d.getFullYear() === py;
+        });
+        label = `last month's logs (${prev.toLocaleString('en-US', { month: 'long', year: 'numeric' })})`;
+    }
+    if (targets.length === 0) {
+        showToast(`No logs to purge (${label}).`, 'info');
+        return;
+    }
+    confirmDialog(`Delete ${targets.length} log record(s) from ${label}? This cannot be undone.`, 'Purge Logs').then(ok => {
+        if (!ok) { showToast('Purge cancelled.', 'warning'); return; }
+        const ids = new Set(targets.map(c => c.id));
+        checkouts = checkouts.filter(c => !ids.has(c.id));
+        targets.forEach(c => queueChange('delete_checkout', { id: c.id }));
+        saveData();
+        renderLogsTable();
+        renderActiveCheckouts();
+        renderStats();
+        showToast(`Purged ${ids.size} log record(s).`, 'success');
+    });
+}
+
+const btnPrintLogs = document.getElementById('btnPrintLogs');
+const btnPurgeLogs = document.getElementById('btnPurgeLogs');
+const btnPurgeLastMonth = document.getElementById('btnPurgeLastMonth');
+if (btnPrintLogs) btnPrintLogs.addEventListener('click', async () => {
+    buildPrintableLogs();
+    if (window.electronAPI && typeof window.electronAPI.printLogs === 'function') {
+        const res = await window.electronAPI.printLogs();
+        if (res && res.success) {
+            showToast('Logs sent to printer.', 'success');
+        } else {
+            showToast('Printing failed' + (res && res.failureType ? ' (' + res.failureType + ')' : '') + '.', 'error');
+        }
+    } else {
+        // Browser fallback (dev mode without the preload bridge).
+        window.print();
+    }
+});
+if (btnPurgeLogs) btnPurgeLogs.addEventListener('click', () => purgeLogs('all'));
+if (btnPurgeLastMonth) btnPurgeLastMonth.addEventListener('click', () => purgeLogs('lastMonth'));
+
 function escapeHtml(str) {
     if (!str) return '';
     return str.replace(/[&<>"']/g, function(m) {

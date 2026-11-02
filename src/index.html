@@ -98,6 +98,10 @@
                 <span>🚫</span>
                 <span>Blacklist</span>
             </a>
+            <a class="nav-item" data-tab="logs" data-min-role="staff">
+                <span>📑</span>
+                <span>Logs</span>
+            </a>
             <a class="nav-item" data-tab="settings">
                 <span>⚙️</span>
                 <span>Cloud & Settings</span>
@@ -168,10 +172,10 @@
                         <div class="form-grid">
                             
                             <!-- Student Name -->
-                            <div class="form-group">
+                            <div class="form-group autocomplete-wrap">
                                 <label for="studentNameInput">Student Name *</label>
-                                <input type="text" id="studentNameInput" list="studentList" placeholder="Start typing student name..." required autocomplete="off">
-                                <datalist id="studentList"></datalist>
+                                <input type="text" id="studentNameInput" placeholder="Start typing student name..." required autocomplete="off">
+                                <div id="studentSuggestions" class="autocomplete-list"></div>
                             </div>
 
                             <!-- Class Type -->
@@ -387,6 +391,44 @@
                                 </tr>
                             </thead>
                             <tbody id="blacklistTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB: LOGS -->
+            <div id="tab-logs" class="tab-content" data-min-role="staff">
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">
+                            <span>📑</span> Checkout Logs
+                        </div>
+                        <div style="display:flex;gap:10px;align-items:center;">
+                            <input type="text" id="searchLogInput" placeholder="🔍 Search logs..." style="width:200px;">
+                            <button class="btn btn-secondary btn-sm" id="btnPrintLogs">🖨️ Print</button>
+                            <button class="btn btn-secondary btn-sm" id="btnPurgeLastMonth">Purge Last Month</button>
+                            <button class="btn btn-danger btn-sm" id="btnPurgeLogs">Purge All Logs</button>
+                        </div>
+                    </div>
+
+                    <p style="color:var(--text-muted);font-size:0.92rem;margin-bottom:18px;">
+                        Every checkout is recorded here — student, equipment type, equipment number, date out, and return date/status.
+                        Logs are stored in the database like any other record, so they survive a reinstall and sync across machines.
+                    </p>
+
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Student Name</th>
+                                    <th>Equipment Type</th>
+                                    <th>Equipment Number</th>
+                                    <th>Checkout Date</th>
+                                    <th>Return Date</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="logsTableBody"></tbody>
                         </table>
                     </div>
                 </div>
@@ -810,6 +852,9 @@
 
     <!-- Toast Notifications Container -->
     <div id="toast-container"></div>
+
+    <!-- Printable logs target. Hidden on screen, the only thing printed by @media print. -->
+    <div id="printArea"></div>
 
     <!-- Script -->
     <script src="auth.js"></script>

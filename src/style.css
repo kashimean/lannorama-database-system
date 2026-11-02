@@ -337,6 +337,70 @@ input:focus, select:focus, textarea:focus {
   box-shadow: 0 0 0 3px rgba(207, 177, 84, 0.22), var(--aero-spec);
 }
 
+/* Option popups are drawn by Chromium on the OS white background, so the white
+   text was invisible. Force a readable scarlet/gold result panel. */
+select option {
+  background-color: #2a1114;
+  color: var(--text-main);
+  padding: 6px 8px;
+}
+
+select option:checked {
+  background-color: var(--primary);
+  color: #fff;
+}
+
+/* Custom autocomplete for the student name box. A native <datalist> popup cannot
+   be styled in Chromium, so suggestions are rendered in an in-app panel. */
+.autocomplete-wrap { position: relative; }
+
+.autocomplete-list {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  max-height: 220px;
+  overflow-y: auto;
+  z-index: 60;
+  display: none;
+  background: linear-gradient(160deg, rgba(198, 1, 31, 0.26) 0%, rgba(42, 17, 20, 0.96) 100%);
+  border: 1px solid rgba(207, 177, 84, 0.38);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow), var(--aero-spec);
+}
+
+.autocomplete-list.open { display: block; }
+
+.autocomplete-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  color: var(--text-main);
+  font-size: 0.9rem;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(207, 177, 84, 0.14);
+}
+
+.autocomplete-item:last-child { border-bottom: none; }
+
+.autocomplete-item:hover {
+  background: rgba(198, 1, 31, 0.38);
+}
+
+.autocomplete-item .ac-class {
+  color: var(--accent);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.autocomplete-item.blacklisted {
+  background: rgba(239, 68, 68, 0.22);
+  color: #ffd9d9;
+}
+
+.autocomplete-item.blacklisted .ac-class { color: #ffb2b2; }
+
 textarea {
   resize: vertical;
   min-height: 80px;
@@ -1297,4 +1361,33 @@ body.kiosk .stats-grid {
 body.kiosk .modal-card {
   min-width: 420px;
   max-width: 90vw;
+}
+
+/* PRINTED LOGS — plain black on white, no theme, no glass, no shadows.
+   Only #printArea is printed; the app itself is hidden. */
+#printArea { display: none; }
+
+@media print {
+  body { background: #fff; color: #000; height: auto; overflow: visible; }
+  header, sidebar, .login-gate, .splash, .welcome-flash, #toast-container, .update-popup, .modal-overlay, #appContainer {
+    display: none !important;
+  }
+  #printArea {
+    display: block !important;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    font-size: 11pt;
+    color: #000;
+  }
+  #printArea h1 { font-size: 15pt; margin-bottom: 6pt; }
+  #printArea p { margin-bottom: 10pt; font-size: 9pt; color: #333; }
+  #printArea table { width: 100%; border-collapse: collapse; }
+  #printArea th, #printArea td {
+    border: 1px solid #000;
+    padding: 5pt 6pt;
+    text-align: left;
+    background: #fff;
+    color: #000;
+  }
+  #printArea th { background: #eee; font-weight: 700; }
+  @page { margin: 15mm; }
 }

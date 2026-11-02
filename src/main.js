@@ -84,6 +84,26 @@ ipcMain.handle('kiosk:set', (_event, on) => {
   return kioskActive;
 });
 
+// Printing the logs. webContents.print() is the reliable path in Electron; window.print()
+// in the renderer often opens a print preview that is not available in a packaged app.
+ipcMain.handle('print:logs', (event) => {
+  return new Promise((resolve) => {
+    const wc = event.sender;
+    const options = {
+      silent: false,
+      printBackground: true,
+      // Landscape so the six log columns fit on one page.
+      landscape: true,
+      margins: { marginType: 'default' }
+    };
+    try {
+      wc.print(options, (success, failureType) => resolve({ success, failureType }));
+    } catch (err) {
+      resolve({ success: false, failureType: String(err) });
+    }
+  });
+});
+
 app.whenReady().then(() => {
   createWindow();
 

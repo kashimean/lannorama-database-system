@@ -14,5 +14,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     setKioskState: (on) => ipcRenderer.invoke('kiosk:set', on),
     onKioskState: (callback) => {
         ipcRenderer.on('kiosk:state', (_event, on) => callback(on));
-    }
+    },
+
+    printLogs: () => ipcRenderer.invoke('print:logs')
 });
