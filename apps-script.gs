@@ -182,8 +182,9 @@ function listSheets(ss) {
 }
 
 function readSheet(ss, name) {
-  var sheet = ss.getSheetByName(name);
-  if (!sheet) return [];
+  // Repair the header row on read too. A sheet that has no id column at all can
+  // never be confirmed by the app, because every row it returns has no id.
+  var sheet = getOrCreateSheet(ss, name);
   var data = sheet.getDataRange().getValues();
   if (data.length <= 1) return [];
 

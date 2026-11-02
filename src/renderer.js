@@ -185,8 +185,9 @@ function listSheets(ss) {
 }
 
 function readSheet(ss, name) {
-  var sheet = ss.getSheetByName(name);
-  if (!sheet) return [];
+  // Repair the header row on read too. A sheet that has no id column at all can
+  // never be confirmed by the app, because every row it returns has no id.
+  var sheet = getOrCreateSheet(ss, name);
   var data = sheet.getDataRange().getValues();
   if (data.length <= 1) return [];
 
@@ -830,9 +831,19 @@ async function verifyQueue(showToasts = true) {
         if (!res.ok) throw new Error('bad response');
         const cloud = await readJsonResponse(res);
 
+        const sheetNameFor = (type, data) => {
+            if (type === 'assign_id') return (data && data.sheet) || 'Students';
+            if (type === 'checkout' || type === 'delete_checkout' || type === 'log' || type === 'delete_log') return 'Checkouts';
+            if (type === 'student' || type === 'delete_student') return 'Students';
+            if (type === 'auth' || type === 'delete_auth') return 'Auth';
+            if (type === 'user' || type === 'delete_user') return 'Users';
+            if (type === 'blacklist' || type === 'delete_blacklist') return 'Blacklist';
+            return 'Equipment';
+        };
+
         const sheetFor = (type, data) => {
             if (type === 'assign_id') return cloud[(data && data.sheet ? String(data.sheet).toLowerCase() : 'students')] || [];
-            if (type === 'checkout') return cloud.checkouts;
+            if (type === 'checkout' || type === 'delete_checkout' || type === 'log' || type === 'delete_log') return cloud.checkouts;
             if (type === 'student' || type === 'delete_student') return cloud.students;
             if (type === 'auth') return cloud.auth;
             if (type === 'user' || type === 'delete_user') return cloud.users;
@@ -850,7 +861,14 @@ async function verifyQueue(showToasts = true) {
                 const byName = rows.some(r => String(r.name).trim().toLowerCase() === String(a.data.name || '').trim().toLowerCase());
                 return byId || byName;
             }
-            return !byId;
+            // Name fallback: a hand-imported row may still have no id, so match on the
+            // name-like column the record carries instead of failing forever.
+            const want = String((a.data && (a.data.name || a.data.code || a.data.studentName)) || '').trim().toLowerCase();
+            const byName = want && rows.some(r => {
+                const cell = String(r.name || r.code || r.studentName || '').trim().toLowerCase();
+                return cell === want;
+            });
+            return !byId && !byName;
         });
 
         if (missing.length === 0) {
@@ -865,6 +883,14 @@ async function verifyQueue(showToasts = true) {
         }
 
         logSync(`Not confirmed: ${missing.length} action(s) missing from the server.`, 'err');
+        // Name the specific action so an actual data problem is not mistaken for an
+        // old deployment. Rows with no id column at all look "missing" forever.
+        missing.slice(0, 8).forEach(a => {
+            const rows = sheetFor(a.type, a.data);
+            const hasIdColumn = Array.isArray(rows) && rows.some(r => r.id !== undefined && String(r.id) !== '');
+            const sheet = sheetNameFor(a.type, a.data);
+            logSync(`  ${a.type} id=${a.data && a.data.id ? a.data.id : '(none)'} -> ${sheet}${hasIdColumn ? '' : ' (no id column in this table)'}`, 'warn');
+        });
         logSync('Most likely cause: the deployed Apps Script is an older version. Redeploy (Deploy > Manage deployments > Edit > New version) with the code in Settings, then click Verify.', 'warn');
         setSyncStatus(`${missing.length} change(s) not confirmed`, false);
         if (showToasts) showToast(`${missing.length} change(s) did not reach the server — redeploy the server code as a NEW version.`, 'error');
