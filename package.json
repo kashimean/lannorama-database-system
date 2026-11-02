@@ -49,11 +49,11 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Lannorama Database System",
       "artifactName": "Lannorama-Database-System-Setup-${version}.exe",
-      "installerIcon": "buildResources/icon.ico",
-      "installerHeader": "buildResources/installerHeader.bmp",
-      "installerSidebar": "buildResources/installerSidebar.bmp",
-      "uninstallerIcon": "buildResources/icon.ico",
-      "uninstallerSidebar": "buildResources/installerSidebar.bmp"
+      "installerIcon": "icon.ico",
+      "uninstallerIcon": "icon.ico",
+      "installerHeader": "installerHeader.bmp",
+      "installerSidebar": "installerSidebar.bmp",
+      "uninstallerSidebar": "installerSidebar.bmp"
     },
     "publish": [
       {

@@ -1,5 +1,7 @@
 // Generates the NSIS installer graphics (24-bit BMP) in the 49ers theme.
-// electron-builder requires exact sizes: header 164x57, sidebar 300x284.
+// electron-builder requires exact sizes: header 164x57, sidebar 164x314
+// (MUI_HEADERIMAGE_BITMAP and MUI_WELCOMEFINISHPAGE_BITMAP). These only apply
+// to the assisted installer, which is what `oneClick: false` produces.
 // No image library is used - BMP is simple enough to write by hand.
 const fs = require('fs');
 const path = require('path');
@@ -149,16 +151,16 @@ for (let x = 0; x < HW; x++) {
 drawText(header, 'LANNORAMA', 10, 14, WHITE, 2);
 drawText(header, 'DATABASE SYSTEM', 10, 36, GOLD, 1);
 
-// ---- Installer sidebar (300x284) ----
-const SW = 300, SH = 284;
+// ---- Installer sidebar (164x314, MUI_WELCOMEFINISHPAGE_BITMAP) ----
+const SW = 164, SH = 314;
 const sidebar = makeCanvas(SW, SH);
 gradient(sidebar, SW, SH, DARK, [60, 12, 16]);
 // gold frame
 for (let x = 0; x < SW; x++) { sidebar[0][x] = GOLD; sidebar[SH - 1][x] = GOLD; }
 for (let y = 0; y < SH; y++) { sidebar[y][0] = GOLD; sidebar[y][SW - 1] = GOLD; }
 // scarlet banner block
-for (let y = 24; y < 78; y++) {
-  for (let x = 16; x < SW - 16; x++) {
+for (let y = 18; y < 66; y++) {
+  for (let x = 10; x < SW - 10; x++) {
     const t = (y - 24) / 54;
     sidebar[y][x] = [
       Math.round(SCARLET[0] + (DARK2[0] - SCARLET[0]) * t),
@@ -167,13 +169,13 @@ for (let y = 24; y < 78; y++) {
     ];
   }
 }
-drawText(sidebar, 'LANNORAMA', 26, 34, WHITE, 3);
-drawText(sidebar, 'DATABASE SYSTEM', 26, 60, GOLD, 2);
-drawText(sidebar, 'EQUIPMENT TRACKER', 20, 100, WHITE, 1);
-drawText(sidebar, 'INSTALL / UPDATE', 20, 118, GOLD, 1);
-drawText(sidebar, 'OFFLINE FIRST', 20, 140, WHITE, 1);
-drawText(sidebar, 'CLOUD SYNCED', 20, 158, WHITE, 1);
-drawText(sidebar, '49ERS THEME', 20, 176, GOLD, 1);
+drawText(sidebar, 'LANNORAMA', 14, 30, WHITE, 2);
+drawText(sidebar, 'DATABASE SYSTEM', 14, 52, GOLD, 1);
+drawText(sidebar, 'EQUIPMENT TRACKER', 12, 86, WHITE, 1);
+drawText(sidebar, 'INSTALL / UPDATE', 12, 104, GOLD, 1);
+drawText(sidebar, 'OFFLINE FIRST', 12, 126, WHITE, 1);
+drawText(sidebar, 'CLOUD SYNCED', 12, 144, WHITE, 1);
+drawText(sidebar, '49ERS THEME', 12, 162, GOLD, 1);
 
 fs.mkdirSync(OUT_DIR, { recursive: true });
 const hFile = writeBmp(path.join(OUT_DIR, 'installerHeader.bmp'), header);
