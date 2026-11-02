@@ -144,3 +144,53 @@ gradients deflate extremely well — they ARE embedded.
   with exe + blockmap + latest.yml. `publisher.js` hit transient `fetch failed` errors; publishing the
   already-built `dist/` artifacts with retry succeeded. Next publish needs `1.0.9`.
 
+
+## v1.0.10 work (uncommitted release, commits a84ab02 + fcaa0e5)
+
+### Dropdown / search results were unreadable
+Chromium draws `<select>` option popups on the OS white background, so the white theme text was
+invisible. `select option` is now dark (`#2a1114`) with the checked option scarlet.
+
+The native `<datalist>` popup cannot be styled at all in Chromium, so the student-name autocomplete
+was replaced with an in-app panel (`#studentSuggestions`, `.autocomplete-list`) rendered in the
+49ers red/gold palette. Blacklisted students are flagged inside the suggestion list.
+
+### Blacklist override no longer auto-overrides
+A Staff/Developer session previously skipped the prompt and completed the checkout silently. It now
+warns first (`showToast` + `playSound('error')`), then requires an explicit `confirmDialog`
+("Blacklist Override") before proceeding. Cancel shows "Override cancelled — checkout not completed."
+
+### Logs system
+Logs ARE the Checkouts sheet — already stored in the database, no duplicate table. New Staff+ tab
+(`#tab-logs`) shows Student Name, Equipment Type, Equipment Number, Checkout Date, Return Date, Status.
+
+- `renderLogsTable()` — searchable via `#searchLogInput`
+- `buildPrintableLogs()` + `@media print` — prints plain black on white only (`#printArea`), the app
+  itself is hidden. Landscape, `@page { margin: 15mm }`.
+- `purgeLogs('all')` and `purgeLogs('lastMonth')` — in-app confirm, each row queued as
+  `delete_checkout` so the purge syncs to the server.
+- Printing goes through `ipcMain.handle('print:logs')` → `webContents.print()`. `window.print()` in the
+  renderer opens a print preview that is not available in a packaged app, so the IPC path is used with
+  `window.print()` only as a dev fallback.
+- Equipment Number: new `number` field on equipment records (`#equipNumberInput` in the inventory
+  modal). The checkout snapshots it at checkout time so the log keeps it even if inventory is edited
+  or deleted later.
+
+### Class type is now the checkout's own
+The class recorded on a checkout is authoritative for that checkout. The form falls back to the
+student's roster class only when the class select is left blank, and the roster is only filled in when
+the student has no class yet — a single checkout never overwrites a student's existing class.
+
+### Apps Script regenerated from scratch (`apps-script.gs`)
+Real bug fixed: `sheetForAction` had no mapping for `delete_checkout`, so "Purge logs" was a silent
+no-op on the server. The rewrite adds:
+- `ACTION_SHEET` map covering every action type including all `delete_*`
+- `LockService.getScriptLock()` so two machines cannot interleave writes
+- `headerRow()` / `columnMap()` writing by the sheet's ACTUAL column position
+- `getOrCreateSheet()` repairs missing canonical columns on older sheets (e.g. `equipmentNumber`)
+- `setupSheets()` — creates missing sheets and repairs headers, never deletes data
+- `doGet` supports `?action=ping`, `?action=setup`, and `?sheet=Checkouts`
+- `doPost` returns `applied` and `skipped` with reasons for debugging
+The Settings panel template (`APPS_SCRIPT_TEMPLATE`) is now generated from this same file.
+
+**Still required:** redeploy the Apps Script as a NEW version (Access must stay Anyone).
