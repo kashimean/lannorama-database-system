@@ -1349,7 +1349,14 @@ function renderStudentSuggestions() {
         });
         studentSuggestions.appendChild(row);
     });
-    studentSuggestions.classList.add('open');
+
+    // Only show the panel while the name box is actually focused. refreshUI() runs this on
+    // startup, which used to pop the list open the moment the app launched.
+    if (document.activeElement === studentNameInput) {
+        studentSuggestions.classList.add('open');
+    } else {
+        studentSuggestions.classList.remove('open');
+    }
 }
 
 // --- RENDER FUNCTIONS ---
