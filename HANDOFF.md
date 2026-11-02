@@ -227,3 +227,28 @@ so any remaining mismatch is named explicitly.
 
 Existing blank cells in the sheet are not retroactively filled — the fix makes reads/writes align
 going forward.
+
+## Second root cause: duplicate header columns (the reason errors continued after redeploy)
+
+Live `?action=headers` against the deployed endpoint showed the header rows are polluted:
+
+```
+Students raw:   ["id","name","classType","classType", ... x48]
+Checkouts raw:  canonical 10, then repeated blocks of studentName..returnDate
+Blacklist raw:  canonical 6, then repeated blocks of studentName,addedBy,addedDate
+```
+
+Mechanism: `getOrCreateSheet()` appends any canonical column the header row does not contain.
+Before the alias fix, a header spelled `studentname` never matched the canonical key `studentName`,
+so **every read appended another copy**. Those duplicate columns are blank, and `readSheet()`
+iterated all columns, so a blank duplicate overwrote the real value — every field that needs an
+alias mapping read back empty. That is exactly the observed symptom.
+
+Fixes:
+- `readSheet()` keeps the first column per key and never lets a blank duplicate clobber a value.
+- `fillRow()` builds a full-width row instead of a sparse array (sparse arrays can throw or blank cells).
+- `?action=repair` clears duplicate header columns only when the column has no data below it.
+- `?action=headers` now also reports `duplicates`.
+
+Simulated against the real polluted Checkouts header row: old logic loses every aliased field,
+new logic keeps all of them.

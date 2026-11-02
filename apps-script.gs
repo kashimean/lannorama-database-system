@@ -91,10 +91,43 @@ function doGet(e) {
       out[name] = {
         raw: raw,
         canonical: HEADERS[name],
-        mismatched: raw.filter(function (h) { return HEADERS[name].indexOf(normalizeHeader(h)) === -1; })
+        mismatched: raw.filter(function (h) { return HEADERS[name].indexOf(normalizeHeader(h)) === -1; }),
+        duplicates: raw.filter(function (h, i) { return raw.indexOf(h) !== i; })
       };
     });
     return json({ status: "success", headers: out });
+  }
+
+  // Clean up duplicate header columns left behind by older versions of this script,
+  // which appended a canonical column on every read when the header spelling did not
+  // match. A duplicate column is only cleared when it has no data below it, so this
+  // never destroys anything.
+  if (params.action === "repair") {
+    var repaired = {};
+    Object.keys(HEADERS).forEach(function (name) {
+      var sheet = ss.getSheetByName(name);
+      if (!sheet) return;
+      var lastCol = sheet.getLastColumn();
+      if (!lastCol) return;
+      var raw = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+      var seen = {};
+      var cleared = [];
+      for (var j = 0; j < raw.length; j++) {
+        var key = normalizeHeader(raw[j]);
+        if (!key) continue;
+        if (!seen[key]) { seen[key] = true; continue; }
+        var hasData = false;
+        if (sheet.getLastRow() > 1) {
+          var col = sheet.getRange(2, j + 1, sheet.getLastRow() - 1, 1).getValues();
+          for (var i = 0; i < col.length; i++) {
+            if (String(col[i][0]).trim() !== "") { hasData = true; break; }
+          }
+        }
+        if (!hasData) { sheet.getRange(1, j + 1).setValue(""); cleared.push(raw[j]); }
+      }
+      if (cleared.length) repaired[name] = cleared;
+    });
+    return json({ status: "success", repaired: repaired });
   }
 
   if (params.action === "setup") {
@@ -212,7 +245,16 @@ function readSheet(ss, name) {
   var rows = [];
   for (var i = 1; i < data.length; i++) {
     var row = {};
-    for (var j = 0; j < headers.length; j++) row[headers[j]] = data[i][j];
+    for (var j = 0; j < headers.length; j++) {
+      var key = headers[j];
+      if (!key) continue;
+      // Duplicate header columns were appended repeatedly by older versions of this
+      // script (a header spelled "studentname" never matched the canonical key, so every
+      // read appended another copy). The later duplicates are blank and were overwriting
+      // the real values, which made every field read back empty. Keep the first column
+      // for a key, and never let a blank duplicate clobber a value that is already set.
+      if (row[key] === undefined || row[key] === "") row[key] = data[i][j];
+    }
     rows.push(row);
   }
   return rows;
@@ -290,16 +332,24 @@ function upsert(ss, name, record) {
 
   for (var r = 1; r < values.length; r++) {
     if (String(values[r][idCol]).trim() === String(record.id).trim()) {
-      var out = [];
-      canonical.forEach(function (h) { out[colOf[h]] = valueOf(record, h); });
+      var out = fillRow(colOf, canonical, record, width);
       sheet.getRange(r + 1, 1, 1, width).setValues([out]);
       return;
     }
   }
 
-  var rowArr = [];
-  canonical.forEach(function (h) { rowArr[colOf[h]] = valueOf(record, h); });
-  sheet.appendRow(rowArr);
+  sheet.appendRow(fillRow(colOf, canonical, record, width));
+}
+
+// Build a full-width row. Older versions left holes in the array for columns that
+// are not canonical, and setValues on a sparse array can throw or blank cells.
+// Only the first occurrence of each header is written; duplicate columns are left
+// exactly as they are so a blank duplicate can never overwrite a real value.
+function fillRow(colOf, canonical, record, width) {
+  var out = [];
+  for (var i = 0; i < width; i++) out.push("");
+  canonical.forEach(function (h) { out[colOf[h]] = valueOf(record, h); });
+  return out;
 }
 
 function valueOf(record, key) {
