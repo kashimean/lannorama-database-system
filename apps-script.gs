@@ -32,22 +32,24 @@ var HEADER_ALIASES = {
   "equipment id": "id", "equipment_id": "id",
   "checkout id": "id", "user id": "id", "blacklist id": "id",
   "name": "name", "full name": "name", "display name": "name",
-  "student name": "studentName", "student_name": "studentName",
-  "class": "classType", "class type": "classType", "class_type": "classType",
+  "student name": "studentName", "student_name": "studentName", "studentname": "studentName",
+  "class": "classType", "class type": "classType", "class_type": "classType", "classtype": "classType",
   "period": "classType", "period/section": "classType", "class period": "classType",
   "category": "category", "type": "category", "item type": "category",
   "stock": "stock", "count": "stock", "max stock": "stock", "quantity": "stock",
   "number": "number", "equipment number": "number", "asset number": "number",
   "serial": "number", "serial number": "number", "asset": "number", "item number": "number",
   "accessories": "accessories", "notes": "accessories", "notes/accessories": "accessories",
-  "checkout date": "checkoutDate", "date out": "checkoutDate", "checked out": "checkoutDate",
+  "checkout date": "checkoutDate", "date out": "checkoutDate", "checked out": "checkoutDate", "checkoutdate": "checkoutDate",
   "return date": "returnDate", "date due": "returnDate", "due date": "returnDate",
-  "returned date": "returnDate", "return status": "status", "status": "status",
+  "returned date": "returnDate", "returndate": "returnDate", "return status": "status", "status": "status",
   "key": "key", "value": "value", "code": "code", "access code": "code",
-  "level": "level", "role": "level", "password hash": "passwordHash", "hash": "passwordHash",
-  "added by": "addedBy", "added date": "addedDate", "date added": "addedDate",
+  "level": "level", "role": "level", "password hash": "passwordHash", "hash": "passwordHash", "passwordhash": "passwordHash",
+  "added by": "addedBy", "addedby": "addedBy", "added date": "addedDate", "addeddate": "addedDate", "date added": "addedDate",
   "reason": "reason", "active": "active",
-  "equipment name": "equipmentName", "equipment": "equipmentName", "item": "equipmentName"
+  "equipment name": "equipmentName", "equipmentname": "equipmentName", "equipment": "equipmentName", "item": "equipmentName",
+  "equipment id": "equipmentId", "equipmentid": "equipmentId",
+  "equipment number": "equipmentNumber", "equipmentnumber": "equipmentNumber"
 };
 
 // Action type -> sheet name. delete_checkout was missing before, which made
@@ -75,6 +77,24 @@ function doGet(e) {
 
   if (params.action === "ping") {
     return json({ status: "ok", time: new Date().toISOString(), sheets: listSheets(ss) });
+  }
+
+  // Report the RAW header row of every sheet. When a sheet's headers are written
+  // without spaces (classtype, studentname, checkoutdate) they do not match the
+  // canonical keys, and the app reads every field as blank.
+  if (params.action === "headers") {
+    var out = {};
+    Object.keys(HEADERS).forEach(function (name) {
+      var sheet = ss.getSheetByName(name);
+      if (!sheet) { out[name] = null; return; }
+      var raw = sheet.getLastColumn() ? sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0] : [];
+      out[name] = {
+        raw: raw,
+        canonical: HEADERS[name],
+        mismatched: raw.filter(function (h) { return HEADERS[name].indexOf(normalizeHeader(h)) === -1; })
+      };
+    });
+    return json({ status: "success", headers: out });
   }
 
   if (params.action === "setup") {

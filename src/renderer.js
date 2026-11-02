@@ -35,22 +35,24 @@ var HEADER_ALIASES = {
   "equipment id": "id", "equipment_id": "id",
   "checkout id": "id", "user id": "id", "blacklist id": "id",
   "name": "name", "full name": "name", "display name": "name",
-  "student name": "studentName", "student_name": "studentName",
-  "class": "classType", "class type": "classType", "class_type": "classType",
+  "student name": "studentName", "student_name": "studentName", "studentname": "studentName",
+  "class": "classType", "class type": "classType", "class_type": "classType", "classtype": "classType",
   "period": "classType", "period/section": "classType", "class period": "classType",
   "category": "category", "type": "category", "item type": "category",
   "stock": "stock", "count": "stock", "max stock": "stock", "quantity": "stock",
   "number": "number", "equipment number": "number", "asset number": "number",
   "serial": "number", "serial number": "number", "asset": "number", "item number": "number",
   "accessories": "accessories", "notes": "accessories", "notes/accessories": "accessories",
-  "checkout date": "checkoutDate", "date out": "checkoutDate", "checked out": "checkoutDate",
+  "checkout date": "checkoutDate", "date out": "checkoutDate", "checked out": "checkoutDate", "checkoutdate": "checkoutDate",
   "return date": "returnDate", "date due": "returnDate", "due date": "returnDate",
-  "returned date": "returnDate", "return status": "status", "status": "status",
+  "returned date": "returnDate", "returndate": "returnDate", "return status": "status", "status": "status",
   "key": "key", "value": "value", "code": "code", "access code": "code",
-  "level": "level", "role": "level", "password hash": "passwordHash", "hash": "passwordHash",
-  "added by": "addedBy", "added date": "addedDate", "date added": "addedDate",
+  "level": "level", "role": "level", "password hash": "passwordHash", "hash": "passwordHash", "passwordhash": "passwordHash",
+  "added by": "addedBy", "addedby": "addedBy", "added date": "addedDate", "addeddate": "addedDate", "date added": "addedDate",
   "reason": "reason", "active": "active",
-  "equipment name": "equipmentName", "equipment": "equipmentName", "item": "equipmentName"
+  "equipment name": "equipmentName", "equipmentname": "equipmentName", "equipment": "equipmentName", "item": "equipmentName",
+  "equipment id": "equipmentId", "equipmentid": "equipmentId",
+  "equipment number": "equipmentNumber", "equipmentnumber": "equipmentNumber"
 };
 
 // Action type -> sheet name. delete_checkout was missing before, which made
@@ -78,6 +80,24 @@ function doGet(e) {
 
   if (params.action === "ping") {
     return json({ status: "ok", time: new Date().toISOString(), sheets: listSheets(ss) });
+  }
+
+  // Report the RAW header row of every sheet. When a sheet's headers are written
+  // without spaces (classtype, studentname, checkoutdate) they do not match the
+  // canonical keys, and the app reads every field as blank.
+  if (params.action === "headers") {
+    var out = {};
+    Object.keys(HEADERS).forEach(function (name) {
+      var sheet = ss.getSheetByName(name);
+      if (!sheet) { out[name] = null; return; }
+      var raw = sheet.getLastColumn() ? sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0] : [];
+      out[name] = {
+        raw: raw,
+        canonical: HEADERS[name],
+        mismatched: raw.filter(function (h) { return HEADERS[name].indexOf(normalizeHeader(h)) === -1; })
+      };
+    });
+    return json({ status: "success", headers: out });
   }
 
   if (params.action === "setup") {
@@ -643,9 +663,15 @@ function systemId(kind) {
 }
 
 function normalizeRow(row, kind, idx) {
+    // Case-insensitive lookup. The deployed script was returning lowercase keys
+    // (classtype, studentname, checkoutdate) because the sheet headers had no spaces,
+    // so every value came back blank and student/checkout edits looked broken.
+    const lower = {};
+    for (const k in row) lower[String(k).toLowerCase()] = row[k];
     const pick = (keys) => {
         for (const k of keys) {
-            if (row[k] !== undefined && row[k] !== null && row[k] !== '') return row[k];
+            const v = lower[String(k).toLowerCase()];
+            if (v !== undefined && v !== null && v !== '') return v;
         }
         return '';
     };
@@ -892,6 +918,24 @@ async function verifyQueue(showToasts = true) {
             logSync(`  ${a.type} id=${a.data && a.data.id ? a.data.id : '(none)'} -> ${sheet}${hasIdColumn ? '' : ' (no id column in this table)'}`, 'warn');
         });
         logSync('Most likely cause: the deployed Apps Script is an older version. Redeploy (Deploy > Manage deployments > Edit > New version) with the code in Settings, then click Verify.', 'warn');
+        // Ask the server for the raw header row of each sheet. Headers written without
+        // spaces (classtype, studentname, checkoutdate) do not match the canonical keys,
+        // which makes every field read back blank.
+        try {
+            const hres = await fetch(settings.webAppUrl + '?action=headers');
+            const hj = await readJsonResponse(hres);
+            if (hj && hj.headers) {
+                Object.keys(hj.headers).forEach(function (name) {
+                    var info = hj.headers[name];
+                    if (!info) { logSync('  sheet ' + name + ': missing on the server', 'warn'); return; }
+                    if (info.mismatched && info.mismatched.length) {
+                        logSync('  sheet ' + name + ' headers not recognized: ' + info.mismatched.join(', ') + ' — rename them to ' + info.canonical.join(', '), 'err');
+                    }
+                });
+            }
+        } catch (hdrErr) {
+            logSync('Header check unavailable (deployed version is older than the code in Settings).', 'warn');
+        }
         setSyncStatus(`${missing.length} change(s) not confirmed`, false);
         if (showToasts) showToast(`${missing.length} change(s) did not reach the server — redeploy the server code as a NEW version.`, 'error');
         return false;
