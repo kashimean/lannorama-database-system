@@ -86,4 +86,61 @@ Project: `C:/Users/Colton/equipment-tracker`
 1. **The user must redeploy the Apps Script as a NEW version** (Deploy → Manage deployments → pencil → New version, Access must stay **Anyone**) or the `Auth`/`Users`/`Blacklist` sheets do nothing — the `/exec` URL serves the snapshot from deploy time. Verify by opening the `/exec` URL in a browser and confirming the JSON contains `auth`, `users`, `blacklist` keys.
 2. Test the login gate (code + password), splash, welcome animation, update popup, mini calendar, Due Today card, blacklist tab, and level gating in the app. The app is confirmed to start and run (renderer no longer throws); the UI has not been exercised end-to-end visually in Electron yet. Theme, maximized launch, opaque splash, and icon are verified by inspecting the built `app.asar`, not visually.
 3. Kiosk mode was dropped by the user ("don't worry about kiosk mode").
-4. Publishing flow: `npm version patch --no-git-tag-version` → commit/push → `node scripts/publisher.js`. Latest release is `v1.0.5`; the next publish needs `1.0.6`.
+4. Publishing flow: `npm version patch --no-git-tag-version` → commit/push → `node scripts/publisher.js`. Latest release is `v1.0.8`.
+
+## Session findings (v1.0.7 + v1.0.8)
+
+### Updater root cause (fixed, commit `69f1b7d`)
+`src/updater.js` registered `ipcMain.handle('updater:state')` **twice**. Electron throws on duplicate
+handler registration (`Attempted to register a second handler for 'updater:state'`). The throw happened
+*AFTER* `updater:check`/`download`/`install` were registered but *BEFORE* the launch `checkForUpdates()`,
+which is exactly why manual "Check for update" worked while the updater stayed `idle` on launch.
+Verified the throw empirically. Duplicate removed; launch check + 12h interval now run.
+Also added a **Install & Restart** button (`#popupInstall`) to the update popup, shown only when
+`status === 'downloaded'`, wired to `installUpdate()` — previously the popup could only download.
+
+### Admin: build-time vs runtime (decision: option 2)
+`win.signAndEditExecutable` is a **build-time** option only. The app runs fine on non-admin school
+hardware: `nsis.perMachine: false` installs per-user to `%LOCALAPPDATA%\Programs\...` (confirmed by the
+actual install path), and nothing in `src/main.js` or `src/updater.js` requires elevation. The admin
+requirement was only electron-builder's `winCodeSign` archive containing symlinks. Kept `true` because
+the build runs on Colton's machine as admin. Alternative if a build machine lacks admin: enable Windows
+Developer Mode (permits symlink creation without admin); the winCodeSign cache is already extracted.
+
+### Icon verified embedded (measured, not assumed)
+Compared rendered 32x32 icon SHA-256 of the built EXE against `buildResources/icon.ico`:
+- `signAndEditExecutable: true` → EXE icon `796525DCC980BCFA` = matches icon.ico ✅
+- `signAndEditExecutable: false` → EXE icon `FDDEE66732049016` = default Electron logo ❌
+Windows reads the taskbar icon from the EXE/AppUserModelID, not from Electron's runtime `BrowserWindow`
+`icon` option, so there is no way to get the taskbar icon without this flag.
+
+### Installer graphics (verified embedded)
+`scripts/build-installer-bitmaps.js` generates 24-bit BMPs with a built-in 5x7 bitmap font (no image
+library available). Correct NSIS sizes: header **164x57**, sidebar **164x314** (MUI_HEADERIMAGE_BITMAP /
+MUI_WELCOMEFINISHPAGE_BITMAP) — these apply only to the assisted installer (`oneClick: false`).
+Paths in `package.json` must be relative to `buildResources` (e.g. `installerSidebar.bmp`), NOT
+`buildResources/installerSidebar.bmp` — the latter resolves to `buildResources/buildResources/...` and
+silently falls back to NSIS's default bitmap.
+Proof of embedding: an incompressible noise BMP of the same dimensions grew the installer by 150,483
+bytes (≈ its 154,582-byte size). The themed gradient BMPs only showed an 88-byte delta because smooth
+gradients deflate extremely well — they ARE embedded.
+
+### Other changes in v1.0.7
+- All user-facing "Google Sheets" wording changed to "server" (status badge, toasts, sync log, Settings
+  panel). The developer-only setup instructions panel still names Google explicitly (left as-is, only
+  the Developer role sees it).
+- 49ers theme: header and sidebar were still slate-blue (`#1e293b`, `#0f172a`) → scarlet/dark gradients;
+  nav active pill now scarlet with red glow.
+- Splash: animated 49ers gradient (black → scarlet → gold → black, 14s loop) + glass card + pulsing logo.
+- Login gate: same animated gradient, frosted card, gold border, accent bar, glowing logo.
+- Web Audio sound cues `playSound('success'|'notice'|'error'|'override')` (synthesized, no asset files),
+  hooked into toasts, offline notice, stock override; On/Off toggle added to Settings (`#soundToggle`,
+  `settings.soundMuted`).
+- Network-disconnect notice modal `#modalNetwork` with the user's exact wording, shown on `offline`,
+  cleared on `online`.
+
+### Live releases
+- `v1.0.7` and `v1.0.8` published to https://github.com/kashimean/lannorama-database-system/releases
+  with exe + blockmap + latest.yml. `publisher.js` hit transient `fetch failed` errors; publishing the
+  already-built `dist/` artifacts with retry succeeded. Next publish needs `1.0.9`.
+
