@@ -245,8 +245,6 @@ function timezoneOf(ss) {
   // of JSON". Every read path goes through readSheet, so this one line broke reads for every
   // sheet, including the confirmation read after deleting a user. Resolve it defensively so a
   // wrong method name can never take the whole app down.
-  // Try both spellings and fall back, so a method-name mismatch can never take the app down.
-  try { if (ss && typeof ss.getTimeZone === "function") return ss.getTimeZone(); } catch (err) {}
   try { if (ss && typeof ss.getTimeZone === "function") return ss.getTimeZone(); } catch (err) {}
   try {
     if (typeof Session !== "undefined" && Session.getScriptTimeZone) return Session.getScriptTimeZone();
