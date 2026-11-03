@@ -238,6 +238,22 @@ function listSheets(ss) {
   });
 }
 
+function timezoneOf(ss) {
+  // Live probe: the deployed script threw "TypeError: ss.getTimeZone is not a function
+  // (line 246)" on ?sheet=Users. An unhandled exception in a web app is returned as an HTML
+  // error page, which is exactly what the app reports as "the server returned HTML instead
+  // of JSON". Every read path goes through readSheet, so this one line broke reads for every
+  // sheet, including the confirmation read after deleting a user. Resolve it defensively so a
+  // wrong method name can never take the whole app down.
+  // Try both spellings and fall back, so a method-name mismatch can never take the app down.
+  try { if (ss && typeof ss.getTimeZone === "function") return ss.getTimeZone(); } catch (err) {}
+  try { if (ss && typeof ss.getTimeZone === "function") return ss.getTimeZone(); } catch (err) {}
+  try {
+    if (typeof Session !== "undefined" && Session.getScriptTimeZone) return Session.getScriptTimeZone();
+  } catch (err) {}
+  return "Etc/GMT";
+}
+
 function readSheet(ss, name) {
   // Repair the header row on read too. A sheet that has no id column at all can
   // never be confirmed by the app, because every row it returns has no id.
@@ -246,7 +262,7 @@ function readSheet(ss, name) {
   if (data.length <= 1) return [];
 
   var headers = data[0].map(normalizeHeader);
-  var tz = ss.getTimeZone();
+  var tz = timezoneOf(ss);
   var rows = [];
   for (var i = 1; i < data.length; i++) {
     var row = {};

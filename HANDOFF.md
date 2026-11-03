@@ -304,3 +304,27 @@ Google Sheets cannot store binary images, so a user photo is a URL column.
   given, so editing a password does not wipe an existing picture.
 
 SMS bug alerts were discussed and the user decided to skip them. No detector or notifier was built.
+
+## HTML-instead-of-JSON on reads (v1.0.17) — root cause
+
+Live probe of the deployed endpoint: `?action=headers` returned JSON, but `?sheet=Users`
+returned `text/html` containing:
+
+    TypeError: ss.getTimeZone is not a function (line 246, file "Code")
+
+An unhandled exception in an Apps Script web app is returned as an HTML error page, which is
+what the app reports as "the server returned HTML instead of JSON". Every read path goes
+through `readSheet()`, so this single line broke reads for every sheet — including the
+confirmation read that runs after deleting a user, which is why the failure appeared to be a
+delete bug rather than a read bug.
+
+Fix: `timezoneOf(ss)` resolves the timezone defensively (both spellings, then
+`Session.getScriptTimeZone()`, then `Etc/GMT`) so a method-name mismatch cannot take the app
+down.
+
+Also verified, not a bug: `delete_user` works correctly. The earlier "row not found" results
+were an artifact of my probe sending the record at the top level; the script reads `a.data`,
+and the app's `queueChange(type, data)` sends `{type, data}`. With the correct shape:
+`{"status":"success","applied":1,"skipped":[]}`.
+
+This fix only takes effect once the Apps Script is redeployed as a NEW version.
