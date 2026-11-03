@@ -245,18 +245,25 @@ function readSheet(ss, name) {
   if (data.length <= 1) return [];
 
   var headers = data[0].map(normalizeHeader);
+  var tz = ss.getTimeZone();
   var rows = [];
   for (var i = 1; i < data.length; i++) {
     var row = {};
     for (var j = 0; j < headers.length; j++) {
       var key = headers[j];
       if (!key) continue;
+      var v = data[i][j];
+      // Date cells come back as Date objects, which JSON serializes as a full ISO
+      // timestamp (2026-11-02T00:00:00.000Z). The app compares that string against a
+      // plain YYYY-MM-DD, which breaks "due today" and "overdue" and prints the whole
+      // timestamp in Logs. Flatten every date to a plain date string.
+      if (v instanceof Date) v = Utilities.formatDate(v, tz, "yyyy-MM-dd");
       // Duplicate header columns were appended repeatedly by older versions of this
       // script (a header spelled "studentname" never matched the canonical key, so every
       // read appended another copy). The later duplicates are blank and were overwriting
       // the real values, which made every field read back empty. Keep the first column
       // for a key, and never let a blank duplicate clobber a value that is already set.
-      if (row[key] === undefined || row[key] === "") row[key] = data[i][j];
+      if (row[key] === undefined || row[key] === "") row[key] = v;
     }
     rows.push(row);
   }
@@ -449,12 +456,36 @@ const DEFAULT_USERS = [
 
 // Calculate past and future dates for demo checkouts
 const today = new Date();
-const formatDateStr = (d) => d.toISOString().split('T')[0];
+// toISOString() shifts the day depending on timezone, so a checkout made late in the
+// day could be recorded as the previous day. Use the local date instead.
+const formatDateStr = (d) => localDateStr(d);
 
 // Local date string — toISOString() can shift a day depending on timezone,
 // which breaks "due today" checks, so use this for anything date-sensitive.
 function localDateStr(d) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Cloud date cells arrive as Date objects, which JSON turns into a full ISO timestamp
+// (2026-11-02T00:00:00.000Z). Comparing that against a plain YYYY-MM-DD breaks "due today"
+// and "overdue", and it prints the whole timestamp in Logs. Flatten anything date-like to
+// a plain YYYY-MM-DD, interpreted in local time so the day never shifts.
+function toDateStr(v) {
+    if (v === undefined || v === null) return '';
+    if (v instanceof Date) return localDateStr(v);
+    const s = String(v).trim();
+    if (!s) return '';
+    // Already a plain date string.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    // ISO timestamp, possibly with a timezone suffix.
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) {
+        const d = new Date(s);
+        if (!isNaN(d.getTime())) return localDateStr(d);
+        return `${m[1]}-${m[2]}-${m[3]}`;
+    }
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? s : localDateStr(d);
 }
 
 function addDays(d, n) {
@@ -481,8 +512,10 @@ function businessDaysFromToday(n) {
 function checkoutStatus(c) {
     if (c.status !== 'active') return c.status;
     const t = localDateStr(new Date());
-    if (c.returnDate === t) return 'due_today';
-    if (c.returnDate > t) return 'active';
+    const due = toDateStr(c.returnDate);
+    if (!due) return 'active';
+    if (due === t) return 'due_today';
+    if (due > t) return 'active';
     return 'overdue';
 }
 
@@ -762,7 +795,7 @@ function normalizeRow(row, kind, idx) {
             studentName: pick(['studentName', 'Student Name', 'Name']),
             reason: pick(['reason', 'Reason', 'Notes']),
             addedBy: pick(['addedBy', 'Added By']),
-            addedDate: pick(['addedDate', 'Added Date', 'Date']),
+            addedDate: toDateStr(pick(['addedDate', 'Added Date', 'Date'])),
             active: String(pick(['active', 'Active'])) === 'false' ? 'false' : 'true'
         };
     }
@@ -775,8 +808,8 @@ function normalizeRow(row, kind, idx) {
         equipmentName: pick(['equipmentName', 'Equipment Name', 'Equipment']),
         equipmentNumber: pick(['equipmentNumber', 'Equipment Number', 'Number', 'Asset Number', 'Serial']),
         accessories: pick(['accessories', 'Accessories', 'Notes']),
-        checkoutDate: pick(['checkoutDate', 'Checkout Date', 'Date Out']),
-        returnDate: pick(['returnDate', 'Return Date', 'Date Due']),
+        checkoutDate: toDateStr(pick(['checkoutDate', 'Checkout Date', 'Date Out'])),
+        returnDate: toDateStr(pick(['returnDate', 'Return Date', 'Date Due'])),
         status: pick(['status', 'Status']) || 'active'
     };
 }

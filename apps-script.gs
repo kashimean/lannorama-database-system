@@ -242,18 +242,25 @@ function readSheet(ss, name) {
   if (data.length <= 1) return [];
 
   var headers = data[0].map(normalizeHeader);
+  var tz = ss.getTimeZone();
   var rows = [];
   for (var i = 1; i < data.length; i++) {
     var row = {};
     for (var j = 0; j < headers.length; j++) {
       var key = headers[j];
       if (!key) continue;
+      var v = data[i][j];
+      // Date cells come back as Date objects, which JSON serializes as a full ISO
+      // timestamp (2026-11-02T00:00:00.000Z). The app compares that string against a
+      // plain YYYY-MM-DD, which breaks "due today" and "overdue" and prints the whole
+      // timestamp in Logs. Flatten every date to a plain date string.
+      if (v instanceof Date) v = Utilities.formatDate(v, tz, "yyyy-MM-dd");
       // Duplicate header columns were appended repeatedly by older versions of this
       // script (a header spelled "studentname" never matched the canonical key, so every
       // read appended another copy). The later duplicates are blank and were overwriting
       // the real values, which made every field read back empty. Keep the first column
       // for a key, and never let a blank duplicate clobber a value that is already set.
-      if (row[key] === undefined || row[key] === "") row[key] = data[i][j];
+      if (row[key] === undefined || row[key] === "") row[key] = v;
     }
     rows.push(row);
   }

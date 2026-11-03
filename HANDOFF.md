@@ -252,3 +252,26 @@ Fixes:
 
 Simulated against the real polluted Checkouts header row: old logic loses every aliased field,
 new logic keeps all of them.
+
+## Date cells: ISO timestamps broke "due today" / "overdue" (v1.0.14)
+
+Live read showed every date field as a full ISO timestamp:
+
+```
+{"id":"co-1793594332708","checkoutDate":"2026-11-02T08:00:00.000Z",
+ "returnDate":"2026-11-02T08:00:00.000Z","status":"active"}
+```
+
+Apps Script `getValues()` returns Date objects, and JSON serializes them as ISO timestamps.
+`checkoutStatus()` compared that string against a plain `YYYY-MM-DD`, so `c.returnDate === t`
+never matched — every checkout due today was classified as merely `active`. Overdue still worked
+by luck (string compare), and Logs printed the whole timestamp.
+
+Fixes:
+- `readSheet()` flattens Date cells to `yyyy-MM-dd` using the spreadsheet timezone
+  (`Utilities.formatDate(v, ss.getTimeZone(), "yyyy-MM-dd")`), so existing records read cleanly.
+- `toDateStr()` in the app normalizes any date-like value (Date object, ISO timestamp, plain
+  string) to `YYYY-MM-DD` in local time, applied to checkoutDate, returnDate and addedDate.
+- `checkoutStatus()` compares normalized dates.
+- `formatDateStr()` now uses the local date instead of `toISOString()`, which could record a
+  late-in-the-day checkout as the previous day.
