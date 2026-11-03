@@ -275,3 +275,16 @@ Fixes:
 - `checkoutStatus()` compares normalized dates.
 - `formatDateStr()` now uses the local date instead of `toISOString()`, which could record a
   late-in-the-day checkout as the previous day.
+
+## Equipment search box + extra Aero (v1.0.15)
+
+- The equipment `<select>` was replaced with a live search box (`#equipmentSearch` + hidden
+  `#equipmentSearchId` + `#equipmentSuggestions` panel), mirroring the student autocomplete.
+  It filters by name or equipment number and shows availability per item; out-of-stock rows are
+  flagged. The panel only opens while the box is focused.
+- `finalizeCheckout()` now clears `equipmentSearchId` because `checkoutForm.reset()` clears the
+  visible box but not the hidden id, so a stale pick would carry into the next checkout.
+- Typing invalidates a previous pick unless the text still matches the chosen item.
+- Login gate gained a rotating conic aurora, drifting light rays, a specular sheen sweeping across
+  the glass card, a shimmering title, and a pulsing glow. Content is forced above the sheen so the
+  sweep does not wash over the text.

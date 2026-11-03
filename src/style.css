@@ -371,6 +371,46 @@ select option:checked {
 
 .autocomplete-list.open { display: block; }
 
+/* Gold top edge + Aero specular highlight on the suggestion panel. */
+.autocomplete-list::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+  border-radius: 999px;
+}
+
+/* Equipment search box: same Aero glass as the student box, with a focus glow. */
+#equipmentSearch, #studentNameInput {
+  background: var(--aero-glass);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--aero-spec);
+  transition: var(--transition);
+}
+
+#equipmentSearch:focus, #studentNameInput:focus {
+  border-color: var(--border-focus);
+  box-shadow: var(--aero-spec), 0 0 0 3px rgba(207, 177, 84, 0.18), var(--aero-glow);
+}
+
+.autocomplete-item .ac-stock {
+  color: var(--accent);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.autocomplete-item.out-of-stock .ac-stock { color: #ffb2b2; }
+
+.autocomplete-empty {
+  padding: 10px 12px;
+  color: var(--text-sub);
+  font-size: 0.85rem;
+}
+
 .autocomplete-item {
   display: flex;
   justify-content: space-between;
@@ -921,6 +961,67 @@ button:disabled {
   background: radial-gradient(ellipse at center, rgba(10, 2, 3, 0.6) 0%, rgba(10, 2, 3, 0.9) 75%);
 }
 
+/* Rotating aurora layer. The base gradient shifts, this adds a slow conic light sweep
+   on top so the background reads as moving light rather than a flat colour ramp. */
+.login-gate::after {
+  content: '';
+  position: absolute;
+  inset: -25%;
+  background: conic-gradient(from 0deg,
+    rgba(207, 177, 84, 0.16),
+    rgba(198, 1, 31, 0.24) 25%,
+    rgba(255, 255, 255, 0.06) 50%,
+    rgba(198, 1, 31, 0.20) 75%,
+    rgba(207, 177, 84, 0.16));
+  animation: auroraSpin 26s linear infinite;
+  filter: blur(42px);
+  opacity: 0.7;
+  mix-blend-mode: screen;
+}
+
+/* Thin drifting light rays, kept faint so text stays readable. */
+.login-beams {
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.05) 0 2px, transparent 2px 26px),
+    repeating-linear-gradient(65deg, rgba(207, 177, 84, 0.06) 0 3px, transparent 3px 40px);
+  animation: beamDrift 18s linear infinite;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* Specular sheen sweeping across the glass card, like Aero glass catching light. */
+.login-sheen {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(120deg, transparent 32%, rgba(255, 255, 255, 0.14) 46%, transparent 62%);
+  background-size: 300% 100%;
+  animation: sheenSweep 6.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Content must sit above the sheen, otherwise the sweep washes over the text. */
+.login-card > * { position: relative; z-index: 1; }
+.login-sheen { z-index: 0; }
+
+@keyframes auroraSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes beamDrift {
+  from { background-position: 0 0, 0 0; }
+  to { background-position: 520px 260px, -420px 320px; }
+}
+
+@keyframes sheenSweep {
+  0%, 100% { background-position: -120% 0; }
+  50% { background-position: 220% 0; }
+}
+
 .login-card {
   position: relative;
   z-index: 1;
@@ -929,9 +1030,9 @@ button:disabled {
   border-radius: var(--radius-lg);
   padding: 34px 38px;
   width: 400px;
-  box-shadow: var(--shadow-lg), var(--aero-spec-strong);
+  box-shadow: var(--shadow-lg), var(--aero-spec-strong), 0 0 60px -12px rgba(198, 1, 31, 0.45);
   backdrop-filter: blur(14px) saturate(160%);
-  animation: splashPop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  animation: splashPop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275), gateGlow 7s ease-in-out infinite;
 }
 
 .login-title {
@@ -940,6 +1041,22 @@ button:disabled {
   color: var(--text-main);
   margin-bottom: 4px;
   letter-spacing: 0.02em;
+  background: linear-gradient(90deg, var(--accent), #ffffff 45%, var(--accent));
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: titleShimmer 6s linear infinite;
+}
+
+@keyframes titleShimmer {
+  from { background-position: 0% 0; }
+  to { background-position: 220% 0; }
+}
+
+@keyframes gateGlow {
+  0%, 100% { box-shadow: var(--shadow-lg), var(--aero-spec-strong), 0 0 60px -12px rgba(198, 1, 31, 0.45); }
+  50% { box-shadow: var(--shadow-lg), var(--aero-spec-strong), 0 0 90px -8px rgba(207, 177, 84, 0.40); }
 }
 
 .login-card::after {

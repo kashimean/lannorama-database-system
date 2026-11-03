@@ -636,7 +636,9 @@ const checkoutForm = document.getElementById('checkoutForm');
 const studentNameInput = document.getElementById('studentNameInput');
 const studentSuggestions = document.getElementById('studentSuggestions');
 const classTypeSelect = document.getElementById('classTypeSelect');
-const equipmentSelect = document.getElementById('equipmentSelect');
+const equipmentSearch = document.getElementById('equipmentSearch');
+const equipmentSearchId = document.getElementById('equipmentSearchId');
+const equipmentSuggestions = document.getElementById('equipmentSuggestions');
 const returnDateInput = document.getElementById('returnDateInput');
 const accessoriesInput = document.getElementById('accessoriesInput');
 
@@ -1553,27 +1555,71 @@ function getEquipmentActiveCount(equipId) {
     return checkouts.filter(c => (c.equipmentId === equipId || c.equipmentName.toLowerCase() === equipId.toLowerCase()) && c.status === 'active').length;
 }
 
-function populateEquipmentDropdown() {
-    const currentVal = equipmentSelect.value;
-    equipmentSelect.innerHTML = '<option value="" disabled selected>Select equipment to check out...</option>';
+function equipmentAvailability(item) {
+    const activeCount = getEquipmentActiveCount(item.id);
+    const available = item.stock - activeCount;
+    return { available, activeCount, label: available <= 0 ? `out of stock (${item.stock} out)` : `${available} of ${item.stock} available` };
+}
 
-    equipment.forEach(item => {
-        const activeCount = getEquipmentActiveCount(item.id);
-        const available = item.stock - activeCount;
-        const option = document.createElement('option');
-        option.value = item.id;
-        
-        let stockLabel = `${available} available / ${item.stock} total`;
-        if (available <= 0) {
-            stockLabel = `⚠️ OUT OF STOCK (${item.stock} checked out)`;
-        }
+// Equipment search box. The old dropdown listed every item in one long select, which was
+// unusable once inventory grew; typing a name now filters it live.
+function renderEquipmentSuggestions() {
+    if (!equipmentSuggestions) return;
+    const q = equipmentSearch.value.trim().toLowerCase();
+    const matches = equipment
+        .filter(e => !q || e.name.toLowerCase().includes(q) || String(e.number || '').toLowerCase().includes(q))
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .slice(0, 12);
 
-        option.textContent = `${item.name} — [${stockLabel}]`;
-        equipmentSelect.appendChild(option);
+    equipmentSuggestions.innerHTML = '';
+    if (matches.length === 0) {
+        equipmentSuggestions.classList.remove('open');
+        return;
+    }
+
+    matches.forEach(item => {
+        const av = equipmentAvailability(item);
+        const row = document.createElement('div');
+        row.className = 'autocomplete-item' + (av.available <= 0 ? ' out-of-stock' : '');
+        row.innerHTML = `<span>${escapeHtml(item.name)}</span><span class="ac-stock">${escapeHtml(av.label)}</span>`;
+        row.addEventListener('click', () => {
+            equipmentSearchId.value = item.id;
+            equipmentSearch.value = item.name;
+            equipmentSuggestions.classList.remove('open');
+            playSound('click');
+        });
+        equipmentSuggestions.appendChild(row);
     });
 
-    if (currentVal) equipmentSelect.value = currentVal;
+    // Only show the panel while the search box is focused, so it does not pop open on launch.
+    if (document.activeElement === equipmentSearch) {
+        equipmentSuggestions.classList.add('open');
+    } else {
+        equipmentSuggestions.classList.remove('open');
+    }
 }
+
+function populateEquipmentDropdown() {
+    renderEquipmentSuggestions();
+}
+
+equipmentSearch.addEventListener('input', () => {
+    // Typing invalidates a previous pick; the id is only set when an item is chosen.
+    const typed = equipmentSearch.value.trim().toLowerCase();
+    const exact = equipment.find(e => e.name.toLowerCase() === typed || String(e.number || '').toLowerCase() === typed);
+    if (exact) equipmentSearchId.value = exact.id;
+    else if (equipmentSearchId.value) {
+        const picked = equipment.find(e => e.id === equipmentSearchId.value);
+        if (!picked || picked.name.toLowerCase() !== typed) equipmentSearchId.value = '';
+    }
+    renderEquipmentSuggestions();
+});
+
+equipmentSearch.addEventListener('focus', () => renderEquipmentSuggestions());
+
+equipmentSearch.addEventListener('blur', () => {
+    setTimeout(() => { if (equipmentSuggestions) equipmentSuggestions.classList.remove('open'); }, 150);
+});
 
 const CLASS_OPTIONS = ['Beginning Digital Media', 'Advanced Digital Media', 'Yearbook', 'Leadership/ASB', 'Other'];
 
@@ -1857,7 +1903,7 @@ checkoutForm.addEventListener('submit', (e) => {
     // student's roster class, but the value actually used here is what gets recorded.
     const rosterStudent = students.find(s => s.name.toLowerCase() === typedName.toLowerCase());
     const selectedClass = classTypeSelect.value || (rosterStudent && rosterStudent.classType) || '';
-    const selectedEquipId = equipmentSelect.value;
+    const selectedEquipId = equipmentSearchId.value;
     const returnDate = returnDateInput.value;
     const accessories = accessoriesInput.value.trim();
 
@@ -1988,6 +2034,9 @@ function finalizeCheckout() {
 
     // Reset form
     checkoutForm.reset();
+    // reset() clears the visible search box but not the hidden id, so a stale pick
+    // would silently carry into the next checkout.
+    equipmentSearchId.value = '';
     setReturnDateDays(1);
     pendingCheckoutData = null;
 }

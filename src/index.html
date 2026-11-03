@@ -42,7 +42,9 @@
     </div>
 
     <div id="loginGate" class="login-gate">
+        <div class="login-beams"></div>
         <div class="login-card">
+            <div class="login-sheen"></div>
             <img class="login-logo" src="assets/icon.png" alt="Lannorama logo">
             <div class="login-title">Lannorama Database System</div>
             <div class="login-sub">Locked — enter access code and password</div>
@@ -191,12 +193,12 @@
                                 </select>
                             </div>
 
-                            <!-- Equipment Select -->
-                            <div class="form-group">
-                                <label for="equipmentSelect">Equipment Item *</label>
-                                <select id="equipmentSelect" required>
-                                    <option value="" disabled selected>Select equipment to check out...</option>
-                                </select>
+                            <!-- Equipment Search -->
+                            <div class="form-group autocomplete-wrap">
+                                <label for="equipmentSearch">Equipment Item *</label>
+                                <input type="text" id="equipmentSearch" placeholder="Search equipment..." required autocomplete="off">
+                                <input type="hidden" id="equipmentSearchId">
+                                <div id="equipmentSuggestions" class="autocomplete-list"></div>
                             </div>
 
                             <!-- Return Date -->
