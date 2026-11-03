@@ -73,6 +73,28 @@ function normalizeHeader(h) {
   return HEADER_ALIASES[k] || k;
 }
 
+// 0-based column index to an A1 column letter (0 -> A, 25 -> Z, 26 -> AA). Reporting a
+// duplicate as "column J" is far more actionable than printing an empty header name.
+function letter(index) {
+  var n = index + 1;
+  var s = "";
+  while (n > 0) {
+    var rem = (n - 1) % 26;
+    s = String.fromCharCode(65 + rem) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+
+function hasDataBelow(sheet, index) {
+  if (sheet.getLastRow() <= 1) return false;
+  var col = sheet.getRange(2, index + 1, sheet.getLastRow() - 1, 1).getValues();
+  for (var i = 0; i < col.length; i++) {
+    if (String(col[i][0]).trim() !== "") return true;
+  }
+  return false;
+}
+
 // ------------------------------------------------------------------ GET
 
 function doGet(e) {
@@ -96,7 +118,11 @@ function doGet(e) {
         raw: raw,
         canonical: HEADERS[name],
         mismatched: raw.filter(function (h) { return HEADERS[name].indexOf(normalizeHeader(h)) === -1; }),
-        duplicates: raw.filter(function (h, i) { return raw.indexOf(h) !== i; })
+        duplicates: raw.map(function (h, i) {
+          if (raw.indexOf(h) === i) return "";
+          return letter(i) + ":" + (String(h).trim() === "" ? "blank" : h);
+        }).filter(function (x) { return x; }),
+        blankColumns: raw.map(function (h, i) { return (String(h).trim() === "") ? letter(i) : ""; }).filter(function (x) { return x; })
       };
     });
     return json({ status: "success", headers: out });
@@ -116,19 +142,23 @@ function doGet(e) {
       var raw = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
       var seen = {};
       var cleared = [];
+      // Blank header columns were skipped before (normalizeHeader("") is falsy), so the
+      // duplicate columns the app reported could never actually be repaired.
+      var toDelete = [];
       for (var j = 0; j < raw.length; j++) {
         var key = normalizeHeader(raw[j]);
-        if (!key) continue;
-        if (!seen[key]) { seen[key] = true; continue; }
-        var hasData = false;
-        if (sheet.getLastRow() > 1) {
-          var col = sheet.getRange(2, j + 1, sheet.getLastRow() - 1, 1).getValues();
-          for (var i = 0; i < col.length; i++) {
-            if (String(col[i][0]).trim() !== "") { hasData = true; break; }
-          }
+        if (!key) {
+          if (!hasDataBelow(sheet, j)) toDelete.push(j);
+          continue;
         }
-        if (!hasData) { sheet.getRange(1, j + 1).setValue(""); cleared.push(raw[j]); }
+        if (!seen[key]) { seen[key] = true; continue; }
+        if (!hasDataBelow(sheet, j)) cleared.push(letter(j) + " (" + raw[j] + ")");
       }
+      // Delete from the right so earlier column indices are not shifted.
+      toDelete.sort(function (a, b) { return b - a; }).forEach(function (j) {
+        sheet.deleteColumn(j + 1);
+        cleared.push(letter(j) + " (blank)");
+      });
       if (cleared.length) repaired[name] = cleared;
     });
     return json({ status: "success", repaired: repaired });
@@ -1078,14 +1108,14 @@ async function verifyQueue(showToasts = true) {
                     if (!info) { logSync('  sheet ' + name + ': missing on the server', 'warn'); return; }
                     const mismatched = (info.mismatched || []).map(String);
                     const named = mismatched.filter(h => h.trim() !== '');
-                    const blanks = mismatched.length - named.length;
                     if (named.length) {
                         logSync('  sheet ' + name + ' headers not recognized: ' + named.join(', ') + ' — rename them to ' + info.canonical.join(', '), 'err');
                     }
                     // Blank entries in mismatched are leftover duplicate columns, not misspelled
-                    // headers, so reporting them as "not recognized" was misleading.
-                    if (blanks > 0) {
-                        logSync('  sheet ' + name + ' has ' + blanks + ' blank header column(s) (leftover duplicates) — open ' + settings.webAppUrl + '?action=repair once to clear them', 'warn');
+                    // headers, so reporting them as "not recognized" was misleading. The server now
+                    // reports them as column letters, which is actionable.
+                    if (info.blankColumns && info.blankColumns.length) {
+                        logSync('  sheet ' + name + ' has blank header columns (' + info.blankColumns.join(', ') + ') — open ' + settings.webAppUrl + '?action=repair once to clear them', 'warn');
                     }
                     if (info.duplicates && info.duplicates.length) {
                         logSync('  sheet ' + name + ' has duplicate header columns (' + info.duplicates.join(', ') + ') — open ' + settings.webAppUrl + '?action=repair once to clear them', 'err');

@@ -328,3 +328,31 @@ and the app's `queueChange(type, data)` sends `{type, data}`. With the correct s
 `{"status":"success","applied":1,"skipped":[]}`.
 
 This fix only takes effect once the Apps Script is redeployed as a NEW version.
+
+## Blank/duplicate header columns on Checkouts (v1.0.21)
+
+Live `?action=headers` right now:
+
+    Checkouts raw: ["id","studentName","classType","equipmentId","equipmentName","accessories",
+                    "checkoutDate","returnDate","status","","","","","equipmentNumber"]
+    duplicates:    ["","",""]   mismatched: ["","","","",""]
+
+Two problems fixed:
+
+1. `?action=repair` could never clear these. `normalizeHeader("")` is falsy, so the loop hit
+   `if (!key) continue;` and skipped every blank column. Now blank columns with no data below
+   are deleted (`sheet.deleteColumn`), iterating right-to-left so earlier indices are not
+   shifted. Non-blank duplicates are still only cleared, never deleted.
+2. The message printed empty strings ("duplicate header columns (, ,)"). `?action=headers` now
+   reports duplicates as column letters (`J:blank`) and a separate `blankColumns` list, and the
+   app prints those instead of blank names.
+
+Helpers added to apps-script.gs: `letter(index)` (0-based index -> A1 letter) and
+`hasDataBelow(sheet, index)`.
+
+Blacklist Lift: verified working against the live deployment with the app's payload shape
+(`{"status":"success","applied":1,"skipped":[]}`). The failure is the confirmation read hitting
+the `ss.getTimeZone is not a function` bug, which returns HTML. Redeploy as a NEW version.
+
+Blacklist student box is now an Aero autocomplete search box (`#blacklistSuggestions`), matching
+the checkout page; native `<datalist>` removed.
