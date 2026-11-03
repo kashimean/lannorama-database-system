@@ -1076,8 +1076,16 @@ async function verifyQueue(showToasts = true) {
                 Object.keys(hj.headers).forEach(function (name) {
                     var info = hj.headers[name];
                     if (!info) { logSync('  sheet ' + name + ': missing on the server', 'warn'); return; }
-                    if (info.mismatched && info.mismatched.length) {
-                        logSync('  sheet ' + name + ' headers not recognized: ' + info.mismatched.join(', ') + ' — rename them to ' + info.canonical.join(', '), 'err');
+                    const mismatched = (info.mismatched || []).map(String);
+                    const named = mismatched.filter(h => h.trim() !== '');
+                    const blanks = mismatched.length - named.length;
+                    if (named.length) {
+                        logSync('  sheet ' + name + ' headers not recognized: ' + named.join(', ') + ' — rename them to ' + info.canonical.join(', '), 'err');
+                    }
+                    // Blank entries in mismatched are leftover duplicate columns, not misspelled
+                    // headers, so reporting them as "not recognized" was misleading.
+                    if (blanks > 0) {
+                        logSync('  sheet ' + name + ' has ' + blanks + ' blank header column(s) (leftover duplicates) — open ' + settings.webAppUrl + '?action=repair once to clear them', 'warn');
                     }
                     if (info.duplicates && info.duplicates.length) {
                         logSync('  sheet ' + name + ' has duplicate header columns (' + info.duplicates.join(', ') + ') — open ' + settings.webAppUrl + '?action=repair once to clear them', 'err');
@@ -1580,6 +1588,50 @@ function renderStudentSuggestions() {
     } else {
         studentSuggestions.classList.remove('open');
     }
+}
+
+// Blacklist student box: the same Aero autocomplete panel as the checkout page. A native
+// <datalist> popup is drawn by Chromium on a white background, which made the white text
+// unreadable, so suggestions are rendered in the in-app panel instead.
+function renderBlacklistSuggestions() {
+    const input = document.getElementById('blacklistStudentInput');
+    const panel = document.getElementById('blacklistSuggestions');
+    if (!input || !panel) return;
+
+    const q = input.value.trim().toLowerCase();
+    const matches = students.filter(s => !q || s.name.toLowerCase().includes(q)).slice(0, 12);
+
+    panel.innerHTML = '';
+    if (matches.length === 0) {
+        panel.classList.remove('open');
+        return;
+    }
+
+    matches.forEach(s => {
+        const row = document.createElement('div');
+        row.className = 'autocomplete-item' + (isBlacklisted(s.name) ? ' blacklisted' : '');
+        row.innerHTML = `<span>${escapeHtml(s.name)}</span><span class="ac-class">${escapeHtml(s.classType || '—')}</span>`;
+        row.addEventListener('click', () => {
+            input.value = s.name;
+            panel.classList.remove('open');
+            if (typeof playSound === 'function') playSound('click');
+        });
+        panel.appendChild(row);
+    });
+
+    // Only show while the box is focused, so it does not pop open on launch.
+    if (document.activeElement === input) panel.classList.add('open');
+    else panel.classList.remove('open');
+}
+
+const blacklistStudentInput = document.getElementById('blacklistStudentInput');
+if (blacklistStudentInput) {
+    blacklistStudentInput.addEventListener('input', renderBlacklistSuggestions);
+    blacklistStudentInput.addEventListener('focus', renderBlacklistSuggestions);
+    blacklistStudentInput.addEventListener('blur', () => {
+        const panel = document.getElementById('blacklistSuggestions');
+        setTimeout(() => { if (panel) panel.classList.remove('open'); }, 150);
+    });
 }
 
 // --- RENDER FUNCTIONS ---

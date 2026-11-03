@@ -498,7 +498,7 @@ select option:checked {
 }
 
 /* Equipment search box: same Aero glass as the student box, with a focus glow. */
-#equipmentSearch, #studentNameInput {
+#equipmentSearch, #studentNameInput, #blacklistStudentInput {
   background: var(--aero-glass);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
@@ -506,7 +506,7 @@ select option:checked {
   transition: var(--transition);
 }
 
-#equipmentSearch:focus, #studentNameInput:focus {
+#equipmentSearch:focus, #studentNameInput:focus, #blacklistStudentInput:focus {
   border-color: var(--border-focus);
   box-shadow: var(--aero-spec), 0 0 0 3px rgba(207, 177, 84, 0.18), var(--aero-glow);
 }
