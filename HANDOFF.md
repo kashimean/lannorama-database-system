@@ -288,3 +288,19 @@ Fixes:
 - Login gate gained a rotating conic aurora, drifting light rays, a specular sheen sweeping across
   the glass card, a shimmering title, and a pulsing glow. Content is forced above the sheen so the
   sweep does not wash over the text.
+
+## User photos on the welcome screen (v1.0.16, commit 5ab08dc)
+
+Google Sheets cannot store binary images, so a user photo is a URL column.
+
+- `HEADERS.Users` gained `photo` plus aliases (photo/image/avatar/picture/photo url/photo_url/image url).
+  This is a schema change -> the Apps Script must be redeployed as a NEW version.
+- `avatarUrl()` converts a Drive share link (`/file/d/<id>/view` or `?id=<id>`) to
+  `https://drive.google.com/thumbnail?id=<id>&sz=w200`; accepts data: URLs and plain URLs as-is.
+- `initialsFor(name)` + `#welcomeAvatar` fall back to initials when there is no photo or the
+  image cannot be fetched (offline, or the Drive file is not shared) — no broken image.
+- `#userPhotoInput` in the user modal; avatar column in the Users table.
+- `addOrUpdateUser(code, name, level, password, photo)` only overwrites photo when a value is
+  given, so editing a password does not wipe an existing picture.
+
+SMS bug alerts were discussed and the user decided to skip them. No detector or notifier was built.
