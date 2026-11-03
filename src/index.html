@@ -61,7 +61,7 @@
         <div class="brand">
             <img class="brand-logo" src="assets/icon.png" alt="Lannorama logo">
             <div>
-                <h1>Lannorama Database System</h1>
+                <h1>Lannorama Database System <span class="brand-credit">Developed by Colton Moeding.</span></h1>
                 <p>Equipment Checkout & Inventory Manager</p>
             </div>
         </div>
@@ -175,31 +175,40 @@
                         <div class="form-grid">
                             
                             <!-- Student Name -->
-                            <div class="form-group autocomplete-wrap">
+                            <div class="form-group">
                                 <label for="studentNameInput">Student Name *</label>
-                                <input type="text" id="studentNameInput" placeholder="Start typing student name..." required autocomplete="off">
-                                <div id="studentSuggestions" class="autocomplete-list"></div>
+                                <div class="autocomplete-wrap">
+                                    <input type="text" id="studentNameInput" placeholder="Start typing student name..." required autocomplete="off">
+                                    <div id="studentSuggestions" class="autocomplete-list"></div>
+                                </div>
                             </div>
 
                             <!-- Class Type -->
                             <div class="form-group">
                                 <label for="classTypeSelect">Class Period / Group (optional)</label>
-                                <select id="classTypeSelect">
-                                    <option value="" disabled selected>Select class...</option>
-                                    <option value="Beginning Digital Media">Beginning Digital Media</option>
-                                    <option value="Advanced Digital Media">Advanced Digital Media</option>
-                                    <option value="Yearbook">Yearbook</option>
-                                    <option value="Leadership/ASB">Leadership/ASB</option>
-                                    <option value="Other">Other</option>
-                                </select>
+                                <div class="autocomplete-wrap aero-select-wrap">
+                                    <!-- Kept as the source of truth: renderer.js reads classTypeSelect.value. -->
+                                    <select id="classTypeSelect" class="aero-select-source">
+                                        <option value="" disabled selected>Select class...</option>
+                                        <option value="Beginning Digital Media">Beginning Digital Media</option>
+                                        <option value="Advanced Digital Media">Advanced Digital Media</option>
+                                        <option value="Yearbook">Yearbook</option>
+                                        <option value="Leadership/ASB">Leadership/ASB</option>
+                                        <option value="Other">Other</option>
+                                    </select>
+                                    <button type="button" class="aero-select-trigger" id="classTypeTrigger">Select class...</button>
+                                    <div id="classTypeMenu" class="autocomplete-list"></div>
+                                </div>
                             </div>
 
                             <!-- Equipment Search -->
-                            <div class="form-group autocomplete-wrap">
+                            <div class="form-group">
                                 <label for="equipmentSearch">Equipment Item *</label>
-                                <input type="text" id="equipmentSearch" placeholder="Search equipment..." required autocomplete="off">
-                                <input type="hidden" id="equipmentSearchId">
-                                <div id="equipmentSuggestions" class="autocomplete-list"></div>
+                                <div class="autocomplete-wrap">
+                                    <input type="text" id="equipmentSearch" placeholder="Search equipment..." required autocomplete="off">
+                                    <input type="hidden" id="equipmentSearchId">
+                                    <div id="equipmentSuggestions" class="autocomplete-list"></div>
+                                </div>
                             </div>
 
                             <!-- Return Date -->

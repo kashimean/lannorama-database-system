@@ -657,6 +657,51 @@ const equipmentSuggestions = document.getElementById('equipmentSuggestions');
 const returnDateInput = document.getElementById('returnDateInput');
 const accessoriesInput = document.getElementById('accessoriesInput');
 
+// A native <select> popup is drawn by Chromium on the OS white background and cannot be
+// styled, so the class picker is an in-app Aero panel. The real select stays in the DOM as
+// the source of truth because renderer.js reads classTypeSelect.value.
+const classTypeTrigger = document.getElementById('classTypeTrigger');
+const classTypeMenu = document.getElementById('classTypeMenu');
+
+function syncClassTypeDisplay() {
+    if (!classTypeTrigger) return;
+    classTypeTrigger.textContent = classTypeSelect.value || 'Select class...';
+    classTypeTrigger.classList.toggle('has-value', !!classTypeSelect.value);
+}
+
+function renderClassTypeMenu() {
+    if (!classTypeMenu) return;
+    classTypeMenu.innerHTML = '';
+    Array.from(classTypeSelect.options).forEach(opt => {
+        const row = document.createElement('div');
+        row.className = 'autocomplete-item' + (opt.value && opt.value === classTypeSelect.value ? ' active' : '');
+        row.textContent = opt.textContent;
+        row.addEventListener('click', () => {
+            classTypeSelect.value = opt.value;
+            syncClassTypeDisplay();
+            if (classTypeMenu) classTypeMenu.classList.remove('open');
+            if (typeof playSound === 'function') playSound('click');
+        });
+        classTypeMenu.appendChild(row);
+    });
+    classTypeMenu.classList.add('open');
+}
+
+if (classTypeTrigger) {
+    classTypeTrigger.addEventListener('click', () => {
+        if (classTypeMenu && classTypeMenu.classList.contains('open')) {
+            classTypeMenu.classList.remove('open');
+        } else {
+            renderClassTypeMenu();
+        }
+    });
+    // Mirror the student/equipment panels: close on blur, but let a click on an item land first.
+    classTypeTrigger.addEventListener('blur', () => {
+        setTimeout(() => { if (classTypeMenu) classTypeMenu.classList.remove('open'); }, 150);
+    });
+    syncClassTypeDisplay();
+}
+
 // Preset Buttons
 const presetToday = document.getElementById('presetToday');
 const presetTomorrow = document.getElementById('presetTomorrow');
@@ -1491,6 +1536,7 @@ studentNameInput.addEventListener('input', () => {
     } else {
         classTypeSelect.value = '';
     }
+    syncClassTypeDisplay();
     renderStudentSuggestions();
 });
 
@@ -1521,6 +1567,7 @@ function renderStudentSuggestions() {
         row.addEventListener('click', () => {
             studentNameInput.value = s.name;
             if (s.classType) classTypeSelect.value = s.classType;
+            syncClassTypeDisplay();
             studentSuggestions.classList.remove('open');
         });
         studentSuggestions.appendChild(row);
@@ -2055,6 +2102,7 @@ function finalizeCheckout() {
     // reset() clears the visible search box but not the hidden id, so a stale pick
     // would silently carry into the next checkout.
     equipmentSearchId.value = '';
+    syncClassTypeDisplay();
     setReturnDateDays(1);
     pendingCheckoutData = null;
 }
@@ -2610,7 +2658,7 @@ function buildPrintableLogs() {
     if (!area) return;
     const rows = checkouts.slice().sort((a, b) => String(a.checkoutDate).localeCompare(String(b.checkoutDate)));
     area.innerHTML = `
-        <h1>Checkout Logs — Lannorama Database System</h1>
+        <h1>Checkout Logs — Lannorama Database System <span class="print-credit">Developed by Colton Moeding.</span></h1>
         <p>Printed ${new Date().toLocaleString()} — ${rows.length} record(s)</p>
         <table>
             <thead><tr>
