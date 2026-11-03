@@ -18,7 +18,7 @@ var HEADERS = {
     "id", "studentName", "classType", "equipmentId", "equipmentName",
     "equipmentNumber", "accessories", "checkoutDate", "returnDate", "status"
   ],
-  Users: ["id", "code", "name", "level", "passwordHash"],
+  Users: ["id", "code", "name", "level", "passwordHash", "photo"],
   Blacklist: ["id", "studentName", "reason", "addedBy", "addedDate", "active"],
   Auth: ["id", "key", "value"]
 };
@@ -45,6 +45,7 @@ var HEADER_ALIASES = {
   "returned date": "returnDate", "returndate": "returnDate", "return status": "status", "status": "status",
   "key": "key", "value": "value", "code": "code", "access code": "code",
   "level": "level", "role": "level", "password hash": "passwordHash", "hash": "passwordHash", "passwordhash": "passwordHash",
+  "photo": "photo", "image": "photo", "avatar": "photo", "picture": "photo", "photo url": "photo", "photo_url": "photo", "image url": "photo",
   "added by": "addedBy", "addedby": "addedBy", "added date": "addedDate", "addeddate": "addedDate", "date added": "addedDate",
   "reason": "reason", "active": "active",
   "equipment name": "equipmentName", "equipmentname": "equipmentName", "equipment": "equipmentName", "item": "equipmentName",

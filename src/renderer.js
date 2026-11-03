@@ -21,7 +21,7 @@ var HEADERS = {
     "id", "studentName", "classType", "equipmentId", "equipmentName",
     "equipmentNumber", "accessories", "checkoutDate", "returnDate", "status"
   ],
-  Users: ["id", "code", "name", "level", "passwordHash"],
+  Users: ["id", "code", "name", "level", "passwordHash", "photo"],
   Blacklist: ["id", "studentName", "reason", "addedBy", "addedDate", "active"],
   Auth: ["id", "key", "value"]
 };
@@ -48,6 +48,7 @@ var HEADER_ALIASES = {
   "returned date": "returnDate", "returndate": "returnDate", "return status": "status", "status": "status",
   "key": "key", "value": "value", "code": "code", "access code": "code",
   "level": "level", "role": "level", "password hash": "passwordHash", "hash": "passwordHash", "passwordhash": "passwordHash",
+  "photo": "photo", "image": "photo", "avatar": "photo", "picture": "photo", "photo url": "photo", "photo_url": "photo", "image url": "photo",
   "added by": "addedBy", "addedby": "addedBy", "added date": "addedDate", "addeddate": "addedDate", "date added": "addedDate",
   "reason": "reason", "active": "active",
   "equipment name": "equipmentName", "equipmentname": "equipmentName", "equipment": "equipmentName", "item": "equipmentName",
@@ -787,7 +788,10 @@ function normalizeRow(row, kind, idx) {
             code: pick(['code', 'Code', 'Access Code']),
             name: pick(['name', 'Name', 'Display Name']) || 'Unnamed User',
             level: (pick(['level', 'Level', 'Role']) || 'ta').toLowerCase(),
-            passwordHash: pick(['passwordHash', 'Password Hash', 'hash'])
+            passwordHash: pick(['passwordHash', 'Password Hash', 'hash']),
+            // Sheets cannot store binary images, so this is a URL: a Google Drive share link
+            // or any direct image URL. Left blank means the welcome screen uses initials.
+            photo: pick(['photo', 'Photo', 'Image', 'Avatar', 'Picture'])
         };
     }
 
@@ -2270,13 +2274,18 @@ function renderUserTable() {
     body.innerHTML = '';
 
     if (list.length === 0) {
-        body.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:20px;">No access codes yet.</td></tr>';
+        body.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:20px;">No access codes yet.</td></tr>';
         return;
     }
 
     list.forEach(u => {
         const tr = document.createElement('tr');
+        const url = avatarUrl(u.photo);
+        const cell = url
+            ? `<span class="user-avatar"><img src="${escapeHtml(url)}" alt="" onerror="this.parentNode.textContent='${escapeHtml(initialsFor(u.name))}'"></span>`
+            : `<span class="user-avatar initials">${escapeHtml(initialsFor(u.name))}</span>`;
         tr.innerHTML = `
+            <td>${cell}</td>
             <td><strong>${escapeHtml(u.code)}</strong></td>
             <td>${escapeHtml(u.name)}</td>
             <td><span class="badge-pill badge-class">${escapeHtml(u.level)}</span></td>
@@ -2305,11 +2314,13 @@ if (btnSaveUser) {
         const name = document.getElementById('userNameInput').value.trim();
         const level = document.getElementById('userLevelSelect').value;
         const pw = document.getElementById('userPasswordInput').value;
+        const photoInput = document.getElementById('userPhotoInput');
+        const photo = photoInput ? photoInput.value.trim() : '';
 
         if (!code) { showToast('Enter an access code.', 'warning'); return; }
         if (!pw) { showToast('Enter a password for this code.', 'warning'); return; }
 
-        const rec = await addOrUpdateUser(code, name, level, pw);
+        const rec = await addOrUpdateUser(code, name, level, pw, photo);
         if (rec) {
             showToast(`Access code ${rec.code} saved (${rec.level}).`, 'success');
             document.getElementById('userPasswordInput').value = '';

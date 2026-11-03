@@ -149,7 +149,7 @@ async function attemptLogin(code, password) {
     return null;
 }
 
-async function addOrUpdateUser(code, name, level, password) {
+async function addOrUpdateUser(code, name, level, password, photo) {
     const c = String(code || '').trim().toUpperCase();
     if (!c) return null;
 
@@ -159,15 +159,40 @@ async function addOrUpdateUser(code, name, level, password) {
         code: c,
         name: name || c,
         level: level || 'ta',
-        passwordHash: ''
+        passwordHash: '',
+        photo: ''
     };
 
     if (name) record.name = name;
     if (level) record.level = level;
     if (password) record.passwordHash = await sha256(password);
+    // Only overwrite the photo when a value is actually given, so editing a password
+    // does not wipe an existing picture.
+    if (photo !== undefined && photo !== null) record.photo = String(photo).trim();
 
     if (typeof queueChange === 'function') queueChange('user', record);
     return record;
+}
+
+// Sheets cannot store binary images, so a user's photo is a URL. A Google Drive share link
+// (…/file/d/<id>/view or ?id=<id>) is turned into the thumbnail endpoint, which renders as a
+// plain image and is small enough for the welcome screen.
+function avatarUrl(photo) {
+    const p = String(photo || '').trim();
+    if (!p) return '';
+    if (/^data:image\//i.test(p)) return p;
+    const m = p.match(/\/file\/d\/([A-Za-z0-9_-]{20,})/) || p.match(/[?&]id=([A-Za-z0-9_-]{20,})/);
+    if (m) return `https://drive.google.com/thumbnail?id=${m[1]}&sz=w200`;
+    return p;
+}
+
+// Initials for the fallback when there is no photo, or the photo cannot be fetched offline.
+function initialsFor(name) {
+    const n = String(name || '').trim();
+    if (!n) return '?';
+    const parts = n.split(/\s+/).filter(Boolean);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
 function currentRole() {
@@ -227,9 +252,31 @@ function applyRolePermissions(user) {
 function showWelcome(user) {
     const flash = document.getElementById('welcomeFlash');
     const text = document.getElementById('welcomeText');
+    const avatar = document.getElementById('welcomeAvatar');
     if (!flash || !text) return;
 
     text.textContent = `Welcome, ${displayNameFor(user)}`;
+
+    if (avatar) {
+        const url = avatarUrl(user && user.photo);
+        if (url) {
+            // Sheets cannot hold binary images, so this is a URL. If it cannot be fetched
+            // (offline, or the Drive file is not shared), fall back to initials rather than
+            // showing a broken image on the welcome screen.
+            avatar.innerHTML = '';
+            const img = document.createElement('img');
+            img.className = 'welcome-avatar-img';
+            img.alt = '';
+            img.onerror = () => {
+                avatar.innerHTML = initialsFor(user && user.name);
+            };
+            img.src = url;
+            avatar.appendChild(img);
+        } else {
+            avatar.textContent = initialsFor(user && user.name);
+        }
+    }
+
     flash.style.display = 'flex';
     flash.classList.remove('fade-out');
     void flash.offsetWidth; // restart the animation
