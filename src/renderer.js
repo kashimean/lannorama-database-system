@@ -2699,17 +2699,36 @@ btnLoadSampleData.addEventListener('click', async () => {
 });
 
 // Helper String Escaper
+// Logs are ordered newest first. Rows with no checkout date sort to the bottom, and ties on the
+// same day are broken by student name so the order is stable between renders.
+function logSortKey(c) {
+    return toDateStr(c.checkoutDate);
+}
+
+function sortLogsNewestFirst(rows) {
+    return rows.slice().sort((a, b) => {
+        const ka = logSortKey(a);
+        const kb = logSortKey(b);
+        if (ka !== kb) {
+            if (!ka) return 1;
+            if (!kb) return -1;
+            return kb.localeCompare(ka);
+        }
+        return String(a.studentName || '').localeCompare(String(b.studentName || ''));
+    });
+}
+
 function renderLogsTable() {
     if (!logsTableBody) return;
     logsTableBody.innerHTML = '';
     const q = (searchLogInput ? searchLogInput.value : '').trim().toLowerCase();
-    const rows = checkouts.filter(c =>
+    const rows = sortLogsNewestFirst(checkouts.filter(c =>
         !q ||
         String(c.studentName).toLowerCase().includes(q) ||
         String(c.equipmentName).toLowerCase().includes(q) ||
         String(c.equipmentNumber || '').toLowerCase().includes(q) ||
         String(c.status).toLowerCase().includes(q)
-    );
+    ));
 
     if (rows.length === 0) {
         logsTableBody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">No logs found.</td></tr>';
@@ -2738,7 +2757,7 @@ function renderLogsTable() {
 function buildPrintableLogs() {
     const area = document.getElementById('printArea');
     if (!area) return;
-    const rows = checkouts.slice().sort((a, b) => String(a.checkoutDate).localeCompare(String(b.checkoutDate)));
+    const rows = sortLogsNewestFirst(checkouts);
     area.innerHTML = `
         <h1>Checkout Logs — Lannorama Database System <span class="print-credit">Developed by Colton Moeding.</span></h1>
         <p>Printed ${new Date().toLocaleString()} — ${rows.length} record(s)</p>
