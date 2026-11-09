@@ -356,3 +356,48 @@ the `ss.getTimeZone is not a function` bug, which returns HTML. Redeploy as a NE
 
 Blacklist student box is now an Aero autocomplete search box (`#blacklistSuggestions`), matching
 the checkout page; native `<datalist>` removed.
+
+## Mobile build (PWA + Capacitor Android) — commit 9285276
+
+Icons (verified):
+- Desktop/in-app icon rebuilt from `buildResources/source-desktop.png` (the Drive image
+  `1v71a7WeOX3oKD9eKHpvtW7MDhEUg_g1D`). `buildResources/icon.ico` = 6 entries, sizes
+  16/32/48/64/128/256. Verified 6/6 embedded in both `dist/win-unpacked/Lannorama Database
+  System.exe` and `dist/Lannorama-Database-System-Setup-1.0.22.exe`.
+- Mobile launcher icon from `buildResources/source-mobile.png` (Drive file
+  `1GkX5zg8YDrULnxQTof8wXe26EEPiAPMO`): Android mipmap 48/72/96/152/192 + adaptive
+  foregrounds per density (108dp canvas, content at 66% safe zone), iOS 1024/180/120/76/40,
+  PWA 192/512 + apple-touch-icon 180. `scripts/build-icons.js` mirrors Android icons into
+  `android/app/src/main/res` (verified byte-identical for all 5 densities).
+- Launcher name under the icon is "Lannorama" (manifest `short_name`, Capacitor `appName`,
+  `android/app/src/main/res/values/strings.xml`).
+- `ic_launcher_background.xml` set to #1A0A0C.
+
+Responsive: 100dvh, safe-area insets, sidebar becomes a horizontal nav strip below 768px,
+tables scroll horizontally, single-column forms, 44px touch targets, 1rem inputs (iOS auto-zoom
+below 16px), landscape-phone block hides the mini calendar. Desktop untouched.
+
+Updater on mobile: CANNOT work — `electron-updater` needs Electron + NSIS, and an installed app
+cannot replace itself. The service worker (`src/sw.js`) is the mobile update path: caches the app
+shell, never caches dynamic backend responses, posts `UPDATE_AVAILABLE` so the popup becomes
+"Reload for update". Desktop-only panels (updater, kiosk) are hidden on mobile with
+`.hidden-on-mobile` (a class, because `applyRolePermissions()` re-sets display on login).
+
+PWA hosting: needs HTTPS — GitHub Pages (free, repo is public). Pages is NOT enabled yet
+(Pages API 404). Backend already answers cross-origin (`Access-Control-Allow-Origin: *`).
+
+APK: built by `.github/workflows/android-apk.yml` on GitHub Actions (free, public repo) — no
+Android SDK/java/adb on this machine, so the APK cannot be built locally. Capacitor
+core/cli/android added as devDependencies; `npx cap add android` scaffolded `android/`.
+The workflow is UNTESTED (first run may need tweaks).
+
+iOS: cannot be built here (needs a Mac + Xcode). Free Apple ID sideload requires re-signing
+every 7 days. Kiosk mode cannot work on mobile (web page cannot lock a device).
+
+## OPEN QUESTION (user decision, not yet built)
+Test accounts: user wants an account option where changes "never stay" but still verify they
+reached the server. Two designs offered:
+  A. write -> verify -> auto-rollback (compensating delete / restore prior value)
+  B. sandbox `Test` sheet on the server, real sheets untouched
+Not implemented. `RANK = {ta:1, staff:2, developer:3}`, `LEVEL_TABS`, `userLevelSelect` options
+are staff/ta. Do not auto-add a test account to the developer account.
