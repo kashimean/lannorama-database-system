@@ -401,3 +401,35 @@ reached the server. Two designs offered:
   B. sandbox `Test` sheet on the server, real sheets untouched
 Not implemented. `RANK = {ta:1, staff:2, developer:3}`, `LEVEL_TABS`, `userLevelSelect` options
 are staff/ta. Do not auto-add a test account to the developer account.
+
+## Test accounts — implemented (commit 3f45a64), design A: write -> verify -> roll back
+
+Chosen behaviour: a test account really writes to the server (so the Apps Script write path is
+exercised and errors surface), the change is confirmed present in the table, then it is undone.
+Nothing survives the session.
+
+- `RANK.test = 2` (same rank as staff), `LEVEL_TABS.test` = staff tab set, `isTestSession()` in
+  src/auth.js, role badge shows "TEST". Test accounts are created in the Developer Console like
+  any other code — never auto-created for the developer.
+- src/renderer.js: `testBaseline` captured at login and refreshed after each cloud read while
+  `testInFlight` is false, `sendAndVerify()`, `runTestAction()`, `undoActionFor()`,
+  `restoreTestRecord()`. `saveData()` skips localStorage writes for test sessions.
+- `verifyQueue` and the test path share `actionAppliedInCloud()` / `cloudRowsFor()` /
+  `sheetNameForAction()` so "the action landed" means the same thing in both.
+- `assign_id` is refused in test mode: it only fills a blank id on a hand-imported row and there
+  is no way to un-write it.
+- If the change cannot be confirmed, it is rolled back locally too and reported as unverified.
+- No caller of `queueChange` uses its return value (checked), so making it async is safe.
+
+## APK build — VERIFIED WORKING (run 42560144941, success)
+
+First three runs failed with exit 126 (permission denied): `android/gradlew` was committed as
+mode 100644 because the executable bit is not preserved when committing from Windows. Fixed by
+`git update-index --chmod=+x android/gradlew` (now 100755), `.gitattributes` keeping gradlew/*.sh
+LF, and `chmod +x gradlew` in the workflow. Run 42560144941 produced a real 3.9M
+`app-debug.apk` and uploaded it as artifact `Lannorama-apk`.
+
+Workflow: checkout -> setup-node 20 -> setup-java 17 (Capacitor 6 / AGP 8 need JDK 17) ->
+`npm ci` -> `npx cap sync android` (android/ is committed, so `cap add android` would fail) ->
+`./gradlew assembleDebug --no-daemon` -> upload artifact. Trigger with Actions tab ->
+"Build Android APK" -> Run workflow, or the GitHub API dispatch.
