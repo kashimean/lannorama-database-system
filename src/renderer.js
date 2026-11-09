@@ -813,14 +813,19 @@ const toastContainer = document.getElementById('toast-container');
 
 // --- STORAGE HELPERS ---
 function saveData() {
-    localStorage.setItem('media_tracker_equipment', JSON.stringify(equipment));
-    localStorage.setItem('media_tracker_students', JSON.stringify(students));
-    localStorage.setItem('media_tracker_checkouts', JSON.stringify(checkouts));
-    localStorage.setItem('media_tracker_users', JSON.stringify(users));
-    localStorage.setItem('media_tracker_blacklist', JSON.stringify(blacklist));
-    localStorage.setItem('media_tracker_settings', JSON.stringify(settings));
-    localStorage.setItem('media_tracker_queue', JSON.stringify(pendingQueue));
-    localStorage.setItem('media_tracker_lastsync', lastSync);
+    // A test session never writes to local storage either. The point of a test account is
+    // that nothing survives the session, and localStorage would keep a change after a
+    // restart even though the server copy was rolled back.
+    if (!isTestSession()) {
+        localStorage.setItem('media_tracker_equipment', JSON.stringify(equipment));
+        localStorage.setItem('media_tracker_students', JSON.stringify(students));
+        localStorage.setItem('media_tracker_checkouts', JSON.stringify(checkouts));
+        localStorage.setItem('media_tracker_users', JSON.stringify(users));
+        localStorage.setItem('media_tracker_blacklist', JSON.stringify(blacklist));
+        localStorage.setItem('media_tracker_settings', JSON.stringify(settings));
+        localStorage.setItem('media_tracker_queue', JSON.stringify(pendingQueue));
+        localStorage.setItem('media_tracker_lastsync', lastSync);
+    }
     refreshUI();
     renderQueueStatus();
 }
@@ -938,22 +943,220 @@ function applyAction(a) {
     }
 }
 
+// --- TEST MODE ---
+// A test account has the same permissions as staff, but every change it makes is written to
+// the server, confirmed present in the table, and then undone. Nothing survives the session.
+//
+// The confirmation is the point: a test login proves the app can actually reach the Apps
+// Script deployment and that the write path runs without errors. If the change cannot be
+// confirmed, it is rolled back locally as well and reported as unverified.
+//
+// The baseline is captured at login and refreshed after each cloud read while no test action
+// is in flight, so "what was there before" always comes from the server, not from the test
+// session's own edits.
+let testBaseline = null;
+let testInFlight = false;
+
+const TEST_ARRAYS = {
+    equipment: () => equipment,
+    student: () => students,
+    checkout: () => checkouts,
+    log: () => checkouts,
+    user: () => users,
+    blacklist: () => blacklist
+};
+
+function baseTypeOf(type) {
+    const t = String(type || '');
+    return t.indexOf('delete') === 0 ? t.slice(7) : t;
+}
+
+function liveArrayFor(type) {
+    const fn = TEST_ARRAYS[baseTypeOf(type)];
+    return fn ? fn() : null;
+}
+
+function captureTestBaseline() {
+    if (!isTestSession()) return;
+    testBaseline = {
+        equipment: JSON.parse(JSON.stringify(equipment)),
+        students: JSON.parse(JSON.stringify(students)),
+        checkouts: JSON.parse(JSON.stringify(checkouts)),
+        users: JSON.parse(JSON.stringify(users)),
+        blacklist: JSON.parse(JSON.stringify(blacklist))
+    };
+}
+
+function baselineRecordFor(type, id) {
+    const arr = testBaseline ? testBaseline[baseTypeOf(type)] : null;
+    if (!Array.isArray(arr)) return null;
+    const hit = arr.find(r => String(r.id) === String(id));
+    return hit ? JSON.parse(JSON.stringify(hit)) : null;
+}
+
+// The inverse of an action: restore the row to whatever the baseline had, or delete it when
+// the baseline had nothing. assign_id is excluded because it only fills a blank id on a
+// hand-imported row and there is no way to un-write it.
+function undoActionFor(action, prior) {
+    const base = baseTypeOf(action.type);
+    const data = prior ? prior : { id: action.data.id };
+    const type = prior ? base : 'delete_' + base;
+    return { id: 'q-undo-' + Date.now(), type, data, ts: new Date().toISOString(), test: true };
+}
+
+function restoreTestRecord(action, prior) {
+    const arr = liveArrayFor(action.type);
+    if (!Array.isArray(arr)) return;
+    const idx = arr.findIndex(r => String(r.id) === String(action.data.id));
+    if (prior) {
+        if (idx === -1) arr.push(prior); else arr[idx] = prior;
+    } else if (idx !== -1) {
+        arr.splice(idx, 1);
+    }
+    refreshUI();
+}
+
+// Send one action and confirm it landed. The POST response is opaque in a browser (Apps
+// Script blocks the CORS preflight), so reading the table back is the only trustworthy
+// confirmation.
+async function sendAndVerify(action) {
+    if (!settings.webAppUrl) return false;
+
+    try {
+        const res = await fetch(settings.webAppUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actions: [action] })
+        });
+        if (res.ok) {
+            const result = await readJsonResponse(res);
+            if (result && Number(result.applied) === 1) return true;
+            if (result && Array.isArray(result.skipped) && result.skipped.length) {
+                logSync('Server rejected test action ' + action.type + ': ' + (result.skipped[0].reason || 'unknown reason'), 'warn');
+                return false;
+            }
+        }
+    } catch (err) {
+        // Opaque response or CORS preflight failure - fall through to the read-back.
+    }
+
+    try {
+        const res = await fetch(settings.webAppUrl);
+        if (!res.ok) return false;
+        const cloud = await readJsonResponse(res);
+        return actionAppliedInCloud(cloud, action);
+    } catch (err) {
+        if (err.htmlPage) logHtmlCause();
+        return false;
+    }
+}
+
+async function runTestAction(action) {
+    if (action.type === 'assign_id') {
+        showToast('Test accounts cannot assign ids to hand-imported rows (that cannot be undone).', 'error');
+        return null;
+    }
+    if (!settings.webAppUrl) {
+        showToast('Test accounts need the server link to verify - nothing was changed.', 'error');
+        return null;
+    }
+    if (!navigator.onLine) {
+        showToast('Offline - test change not sent, nothing was changed.', 'error');
+        return null;
+    }
+
+    testInFlight = true;
+    const prior = baselineRecordFor(action.type, action.data.id);
+
+    // Show the effect while it is on the server, so the feature can actually be exercised.
+    applyAction(action);
+    refreshUI();
+
+    const landed = await sendAndVerify(action);
+    if (!landed) {
+        testInFlight = false;
+        restoreTestRecord(action, prior);
+        logSync('Test ' + action.type + ' did not reach the server - rolled back locally.', 'err');
+        showToast('Test change did not reach the server - rolled back.', 'error');
+        return null;
+    }
+
+    logSync('Test ' + action.type + ' confirmed on the server. Rolling back...', 'ok');
+    const undo = undoActionFor(action, prior);
+    const rolledBack = await sendAndVerify(undo);
+    testInFlight = false;
+    restoreTestRecord(action, prior);
+
+    if (rolledBack) {
+        logSync('Test ' + action.type + ' rolled back - the table is back to its original state.', 'ok');
+        showToast('Test change verified on the server and rolled back.', 'info');
+    } else {
+        logSync('Test ' + action.type + ' landed, but the rollback was not confirmed.', 'warn');
+        showToast('Reached the server, but the rollback was not confirmed - check the table.', 'warning');
+    }
+
+    return action;
+}
+
+// Shared by verifyQueue and the test path so both use exactly the same definition of
+// "this action is reflected in the table".
+const SHEET_NAME_BY_BASE = {
+    equipment: 'Equipment', student: 'Students', checkout: 'Checkouts', log: 'Checkouts',
+    user: 'Users', blacklist: 'Blacklist', auth: 'Auth'
+};
+
+function sheetNameForAction(a) {
+    if (a.type === 'assign_id') return (a.data && a.data.sheet) || 'Students';
+    return SHEET_NAME_BY_BASE[baseTypeOf(a.type)] || 'Equipment';
+}
+
+function cloudRowsFor(cloud, a) {
+    const type = String(a.type || '');
+    if (type === 'assign_id') return cloud[(a.data && a.data.sheet ? String(a.data.sheet).toLowerCase() : 'students')] || [];
+    const key = baseTypeOf(type);
+    return cloud[key] || [];
+}
+
+// A delete counts as applied when the row is GONE. An assign_id counts as applied when the
+// id is present. Name fallback: a hand-imported row may still have no id, so match on the
+// name-like column the record carries instead of failing forever.
+function actionAppliedInCloud(cloud, a) {
+    const rows = cloudRowsFor(cloud, a);
+    if (!Array.isArray(rows)) return false;
+
+    const want = String((a.data && (a.data.name || a.data.code || a.data.studentName)) || '').trim().toLowerCase();
+    const byId = rows.some(r => String(r.id) === String(a.data.id));
+    const byName = want && rows.some(r => {
+        const cell = String(r.name || r.code || r.studentName || '').trim().toLowerCase();
+        return cell === want;
+    });
+
+    if (String(a.type).indexOf('delete') === 0) return !byId && !byName;
+    return byId || byName;
+}
+
 // Every change is saved locally first, then queued for the cloud
-function queueChange(type, data) {
+async function queueChange(type, data) {
     // Guard against re-queueing the same change on every sync pass — this was
     // the duplicate-row loop (an unconfirmed change flushed again each time).
     const key = type + '|' + JSON.stringify(data);
     if (pendingQueue.some(a => (a.type + '|' + JSON.stringify(a.data)) === key)) return null;
 
-    pendingQueue.push({
+    const action = {
         id: 'q-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
         type,
         data,
         ts: new Date().toISOString()
-    });
-    saveData();
-    if (settings.webAppUrl) flushQueue();
-    return pendingQueue[pendingQueue.length - 1];
+    };
+
+    if (!isTestSession()) {
+        pendingQueue.push(action);
+        saveData();
+        if (settings.webAppUrl) flushQueue();
+        return action;
+    }
+
+    return runTestAction(action);
 }
 
 async function flushQueue(showToasts = false) {
@@ -1035,45 +1238,7 @@ async function verifyQueue(showToasts = true) {
         if (!res.ok) throw new Error('bad response');
         const cloud = await readJsonResponse(res);
 
-        const sheetNameFor = (type, data) => {
-            if (type === 'assign_id') return (data && data.sheet) || 'Students';
-            if (type === 'checkout' || type === 'delete_checkout' || type === 'log' || type === 'delete_log') return 'Checkouts';
-            if (type === 'student' || type === 'delete_student') return 'Students';
-            if (type === 'auth' || type === 'delete_auth') return 'Auth';
-            if (type === 'user' || type === 'delete_user') return 'Users';
-            if (type === 'blacklist' || type === 'delete_blacklist') return 'Blacklist';
-            return 'Equipment';
-        };
-
-        const sheetFor = (type, data) => {
-            if (type === 'assign_id') return cloud[(data && data.sheet ? String(data.sheet).toLowerCase() : 'students')] || [];
-            if (type === 'checkout' || type === 'delete_checkout' || type === 'log' || type === 'delete_log') return cloud.checkouts;
-            if (type === 'student' || type === 'delete_student') return cloud.students;
-            if (type === 'auth') return cloud.auth;
-            if (type === 'user' || type === 'delete_user') return cloud.users;
-            if (type === 'blacklist' || type === 'delete_blacklist') return cloud.blacklist;
-            return cloud.equipment;
-        };
-
-        const missing = pendingQueue.filter(a => {
-            const rows = sheetFor(a.type, a.data);
-            if (!Array.isArray(rows)) return true;
-            const byId = rows.some(r => String(r.id) === String(a.data.id));
-            // A delete counts as applied when the row is GONE. An assign_id
-            // counts as applied when the id is present on the row.
-            if (a.type.indexOf('delete') === 0) {
-                const byName = rows.some(r => String(r.name).trim().toLowerCase() === String(a.data.name || '').trim().toLowerCase());
-                return byId || byName;
-            }
-            // Name fallback: a hand-imported row may still have no id, so match on the
-            // name-like column the record carries instead of failing forever.
-            const want = String((a.data && (a.data.name || a.data.code || a.data.studentName)) || '').trim().toLowerCase();
-            const byName = want && rows.some(r => {
-                const cell = String(r.name || r.code || r.studentName || '').trim().toLowerCase();
-                return cell === want;
-            });
-            return !byId && !byName;
-        });
+        const missing = pendingQueue.filter(a => !actionAppliedInCloud(cloud, a));
 
         if (missing.length === 0) {
             const count = pendingQueue.length;
@@ -1090,9 +1255,9 @@ async function verifyQueue(showToasts = true) {
         // Name the specific action so an actual data problem is not mistaken for an
         // old deployment. Rows with no id column at all look "missing" forever.
         missing.slice(0, 8).forEach(a => {
-            const rows = sheetFor(a.type, a.data);
+            const rows = cloudRowsFor(cloud, a);
             const hasIdColumn = Array.isArray(rows) && rows.some(r => r.id !== undefined && String(r.id) !== '');
-            const sheet = sheetNameFor(a.type, a.data);
+            const sheet = sheetNameForAction(a);
             logSync(`  ${a.type} id=${a.data && a.data.id ? a.data.id : '(none)'} -> ${sheet}${hasIdColumn ? '' : ' (no id column in this table)'}`, 'warn');
         });
         logSync('Most likely cause: the deployed Apps Script is an older version. Redeploy (Deploy > Manage deployments > Edit > New version) with the code in Settings, then click Verify.', 'warn');
@@ -1238,6 +1403,11 @@ async function syncFromCloud(showToasts = true) {
 
         // Put unsynced local changes back on top of the cloud snapshot
         pendingQueue.forEach(applyAction);
+
+        // A test session has no pending queue (every action is undone immediately), so the
+        // cloud snapshot here is the true baseline. Refresh it only when no test action is in
+        // flight, otherwise the rollback would restore the test session's own edits.
+        if (isTestSession() && !testInFlight) captureTestBaseline();
 
         lastSync = new Date().toISOString();
         saveData();
@@ -3004,7 +3174,10 @@ async function startAuth() {
         return;
     }
 
-    showSplash(1800, () => showLoginGate(applyRolePermissions));
+    showSplash(1800, () => showLoginGate((user) => {
+        applyRolePermissions(user);
+        captureTestBaseline();
+    }));
 
     if (btnSet) {
         btnSet.addEventListener('click', async () => {

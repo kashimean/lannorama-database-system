@@ -1,11 +1,15 @@
 // Auth layer: splash, login gate (access code + password), welcome animation,
 // developer console, and role/level permissions.
 //
-// Levels: developer > staff > ta
+// Levels: developer > staff = test > ta
 //   developer — everything, including changing the Apps Script link
 //   staff     — checkout, add equipment, roster, blacklist, settings (sync/updater,
 //               but the Drive link is read-only), updater
 //   ta        — checkout only
+//   test      — same permissions as staff, but every change is rolled back after it is
+//               confirmed on the server, so a test session cannot leave data behind.
+//               Test accounts are created in the Developer Console like any other code;
+//               one is never created automatically for the developer.
 //
 // Developer hash is hardcoded (your "set in stone" password). Staff and TA codes
 // are created in the Developer Console and stored in the cloud Users sheet.
@@ -15,12 +19,15 @@ const ADMIN_HASH = '9212e5e6ef4106525be27ac4fcde2db1aa65f4e706eb469cea7f0baec27d
 const ADMIN_CODE = 'DEV';
 const ADMIN_NAME = 'Developer';
 
-const RANK = { ta: 1, staff: 2, developer: 3 };
+// Test sits at the staff rank so it can exercise the same features, but it is a distinct
+// level: the renderer treats it as "write, verify, roll back" instead of "write and keep".
+const RANK = { ta: 1, staff: 2, test: 2, developer: 3 };
 
 // Tabs visible per level (a level sees its own tier plus everything below it).
 const LEVEL_TABS = {
     ta: ['checkout'],
     staff: ['checkout', 'active-checkouts', 'roster', 'blacklist', 'inventory', 'settings'],
+    test: ['checkout', 'active-checkouts', 'roster', 'blacklist', 'inventory', 'settings'],
     developer: null // null = all tabs
 };
 
@@ -199,6 +206,12 @@ function currentRole() {
     return sessionUser ? sessionUser.level : null;
 }
 
+// True when the signed-in code is a test account. The renderer uses this to send a change,
+// confirm it landed, then undo it - and to skip writing to local storage entirely.
+function isTestSession() {
+    return sessionUser && sessionUser.level === 'test';
+}
+
 function currentUser() {
     return sessionUser;
 }
@@ -240,7 +253,11 @@ function applyRolePermissions(user) {
     }
 
     const roleBadge = document.getElementById('roleBadge');
-    if (roleBadge) roleBadge.textContent = displayNameFor(user);
+    if (roleBadge) {
+        // A test session must be obvious on screen - it looks like staff otherwise, and the
+        // only difference is that nothing it does survives.
+        roleBadge.textContent = displayNameFor(user) + (level === 'test' ? ' · TEST' : '');
+    }
 
     const signOut = document.getElementById('btnLogout');
     if (signOut) signOut.style.display = '';

@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - 'src/**'
+      - 'android/**'
       - 'capacitor.config.json'
       - 'package.json'
 
@@ -22,18 +23,27 @@ jobs:
         with:
           node-version: '20'
 
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          # Capacitor 6 needs JDK 17 (AGP 8 requires 17, and the runner default is not
+          # guaranteed to match).
+          java-version: '17'
+
       - name: Install dependencies
         run: npm ci
 
-      - name: Scaffold the Android project
-        run: npx cap add android
-
-      - name: Copy web assets into the Android project
+      # android/ is committed, so the platform is already scaffolded. Sync copies the web
+      # assets into it and updates the Gradle plugin list.
+      - name: Sync web assets into the Android project
         run: npx cap sync android
 
       - name: Build the debug APK
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon
+
+      - name: Report APK size
+        run: ls -lh android/app/build/outputs/apk/debug/
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
