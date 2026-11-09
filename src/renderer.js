@@ -3045,3 +3045,62 @@ if (settings.webAppUrl) {
 } else {
     setSyncStatus(navigator.onLine ? 'Local Storage Mode' : `Offline — ${pendingQueue.length} change(s) queued`, false);
 }
+
+// --- MOBILE / PWA ---
+// Electron does not exist on iOS or Android, so the desktop updater (electron-updater +
+// NSIS) has no equivalent there: an installed app cannot replace itself. On mobile the
+// service worker is the only real update path, and the desktop-only panels are hidden.
+function isMobileDevice() {
+    if (navigator.userAgentData && typeof navigator.userAgentData.mobile === 'boolean') {
+        return navigator.userAgentData.mobile;
+    }
+    return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+}
+
+const IS_MOBILE = isMobileDevice();
+
+if (IS_MOBILE) {
+    document.body.classList.add('capacitor-mobile');
+
+    // Kiosk cannot work on mobile: a web page cannot lock a device. Android needs Device
+    // Owner, iOS needs supervised/MDM. Printing also falls back to window.print().
+    const mobileOnlyHidden = ['updaterPanel', 'kioskPanel'];
+    mobileOnlyHidden.forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden-on-mobile');
+    });
+
+    const kioskTag = document.getElementById('kioskTag');
+    if (kioskTag) kioskTag.classList.add('hidden-on-mobile');
+    const exitKiosk = document.getElementById('btnExitKiosk');
+    if (exitKiosk) exitKiosk.classList.add('hidden-on-mobile');
+}
+
+if (IS_MOBILE && 'serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {
+        // Registration fails on file:// (the Capacitor build serves from https://localhost,
+        // so this only matters when the page is opened directly from disk).
+    });
+
+    navigator.serviceWorker.addEventListener('message', (event) => {
+        if (!event.data || event.data.type !== 'UPDATE_AVAILABLE') return;
+
+        const popup = document.getElementById('updatePopup');
+        const body = document.getElementById('updatePopupBody');
+        if (!popup || !body) return;
+
+        body.textContent = 'A newer version is available. Reload to load it.';
+
+        // There is no download/install step on mobile - the shell is just files.
+        const dl = document.getElementById('popupDownload');
+        const inst = document.getElementById('popupInstall');
+        if (dl) dl.style.display = 'none';
+        if (inst) {
+            inst.textContent = '🚀 Reload for update';
+            inst.style.display = 'inline-block';
+            inst.onclick = () => window.location.reload();
+        }
+
+        popup.style.display = 'flex';
+    });
+}

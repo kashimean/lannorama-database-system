@@ -1625,3 +1625,176 @@ body.kiosk .modal-card {
   #printArea th { background: #eee; font-weight: 700; }
   @page { margin: 15mm; }
 }
+
+/* ============================================================
+   Mobile / tablet adaptation (PWA + Capacitor builds)
+   Desktop layout is untouched: these only apply below 1024px.
+   ============================================================ */
+
+/* 100vh is wrong on iOS Safari (the URL bar changes height mid-session) and on Android
+   with a dynamic toolbar. dvh tracks the real viewport; vh stays as the fallback. */
+body {
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* Respect the notch / home indicator on iPhones and the gesture bar on Android. */
+header {
+  padding-left: max(20px, env(safe-area-inset-left));
+  padding-right: max(20px, env(safe-area-inset-right));
+}
+
+main {
+  padding-left: max(24px, env(safe-area-inset-left));
+  padding-right: max(24px, env(safe-area-inset-right));
+  padding-bottom: max(24px, env(safe-area-inset-bottom));
+}
+
+/* --- Tablets (iPad, iPad landscape, 10" Android tablets) --- */
+@media (max-width: 1024px) {
+  sidebar {
+    width: 200px;
+    padding: 16px 10px;
+  }
+
+  main { padding: 20px; }
+
+  .stats-grid {
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 12px;
+  }
+
+  .panel { padding: 16px; }
+}
+
+/* --- Phones (iPhone, Android phones) --- */
+@media (max-width: 768px) {
+  /* The sidebar becomes a horizontal nav strip across the top. A 230px column on a
+     390px-wide phone leaves ~160px of usable content, which is not workable. */
+  .app-container {
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  sidebar {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 10px 12px;
+    gap: 8px;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+    /* Hide the scrollbar so the nav strip reads as part of the chrome. */
+    scrollbar-width: none;
+  }
+
+  sidebar::-webkit-scrollbar { display: none; }
+
+  .nav-item {
+    flex: 0 0 auto;
+    padding: 10px 14px;
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+
+  .nav-item .badge { margin-left: 6px; }
+
+  header {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px 16px;
+  }
+
+  header h1 { font-size: 1.05rem; }
+  .brand-credit { display: block; font-size: 0.68rem; }
+  header p { font-size: 0.78rem; }
+
+  .status-badge {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  main { padding: 14px; }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .stat-card { padding: 12px; }
+  .stat-card .stat-value { font-size: 1.4rem; }
+
+  .panel { padding: 14px; }
+  .panel-header { margin-bottom: 12px; }
+
+  /* One column per row - a two-column form on a phone squeezes the input to ~150px. */
+  .form-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  /* Tables are the widest thing in the app. Let them scroll instead of wrapping every
+     cell, which turns a 6-column log into an unreadable wall. */
+  .panel table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+
+  .panel table th,
+  .panel table td {
+    padding: 10px 12px;
+    font-size: 0.85rem;
+  }
+
+  /* Touch targets: 44px is the minimum Apple recommends, and a finger is far less
+     precise than a mouse. */
+  .btn, .tag-btn, .nav-item {
+    min-height: 44px;
+    min-width: 44px;
+    font-size: 0.9rem;
+  }
+
+  input, select, textarea {
+    min-height: 44px;
+    font-size: 1rem; /* below 16px iOS auto-zooms the page on focus */
+  }
+
+  .autocomplete-list { max-height: 240px; }
+
+  .autocomplete-item { padding: 12px 14px; font-size: 0.9rem; }
+
+  /* Modals take most of the screen on a phone. */
+  .modal-card,
+  .update-popup-card {
+    width: min(94vw, 520px);
+    max-height: 86dvh;
+    overflow-y: auto;
+  }
+
+  .mini-calendar { max-width: 100%; }
+
+  /* Landscape phones: the nav strip is fine, but vertical space is tight, so shrink
+     the decorative overlays rather than scrolling past them. */
+  .welcome-avatar { width: 72px; height: 72px; font-size: 1.6rem; }
+  .splash-bar { width: 200px; }
+}
+
+/* Landscape phone (e.g. 844x390) - height, not width, is the constraint. */
+@media (max-width: 900px) and (max-height: 500px) {
+  .splash-inner, .welcome-card { padding: 16px 20px; }
+  .welcome-flash { padding: 12px; }
+  .mini-calendar { display: none; }
+}
+
+/* Capacitor injects a native status bar; keep the header clear of it. */
+body.capacitor-android { padding-top: env(safe-area-inset-top); }
+
+/* Desktop-only features hidden on mobile. A class rather than an inline style, because
+   applyRolePermissions() re-sets display on login and would undo an inline hide. */
+.hidden-on-mobile { display: none !important; }

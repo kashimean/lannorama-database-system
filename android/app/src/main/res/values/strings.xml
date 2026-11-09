@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Lannorama</string>
+    <string name="title_activity_main">Lannorama</string>
+    <string name="package_name">com.lannorama.mobile</string>
+    <string name="custom_url_scheme">com.lannorama.mobile</string>
+</resources>

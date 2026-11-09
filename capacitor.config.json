@@ -1,0 +1,16 @@
+{
+  "appId": "com.lannorama.mobile",
+  "appName": "Lannorama",
+  "webDir": "src",
+  "bundledWebRuntime": false,
+  "android": {
+    "allowBackup": false,
+    "debuggable": false
+  },
+  "ios": {
+    "contentUnsafeUIChecksAllowedByException": false
+  },
+  "server": {
+    "rootLocation": "src"
+  }
+}

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Adaptive icon background. The mobile artwork is opaque, so this only shows in the
+       padded ring around the foreground once the launcher masks it to a circle/squircle. -->
+    <color name="ic_launcher_background">#1A0A0C</color>
+</resources>
