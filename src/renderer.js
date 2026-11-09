@@ -1056,6 +1056,13 @@ async function runTestAction(action) {
         showToast('Test accounts cannot assign ids to hand-imported rows (that cannot be undone).', 'error');
         return null;
     }
+    // The teacher password is stored as a hash in the Auth table, but it is also cached in
+    // local storage by saveAuth(). Rolling back the server row would not undo that cache, so
+    // a test session is not allowed to change it.
+    if (action.type === 'auth') {
+        showToast('Test accounts cannot change the password (it is cached locally and cannot be rolled back).', 'error');
+        return null;
+    }
     if (!settings.webAppUrl) {
         showToast('Test accounts need the server link to verify - nothing was changed.', 'error');
         return null;
