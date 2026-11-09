@@ -1,0 +1,46 @@
+name: Deploy PWA to GitHub Pages
+
+# Pages is set to "Build and deploy from a Baked HTML file" (build_type: workflow) for this
+# repo, so the site is served from an artifact this workflow uploads. Publishing src/ directly
+# is what makes the PWA work: previously the source path was /docs, which does not exist, so
+# the site root served GitHub's 404 page and the app was only reachable under /src/.
+
+on:
+  push:
+    branches: main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment:
+      name: github.com
+      url: https://kashimean.github.io/lannorama-database-system/
+    steps:
+      - uses: actions/checkout@v4
+
+      # Publish the app shell at the site root so start_url "./index.html", scope "./",
+      # manifest.webmanifest, sw.js and assets/ all resolve from the root.
+      - name: Prepare site
+        run: |
+          mkdir -p site
+          cp -r src/* site/
+          ls -1 site
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    environment:
+      name: github.com
+      url: https://kashimean.github.io/lannorama-database-system/
+    steps:
+      - uses: actions/deploy-pages@v4
