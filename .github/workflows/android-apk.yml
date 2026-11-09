@@ -40,7 +40,9 @@ jobs:
 
       - name: Build the debug APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
+        # chmod first: the exec bit is not preserved for files committed from Windows,
+        # which made this step fail with exit 126 (permission denied).
+        run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
 
       - name: Report APK size
         run: ls -lh android/app/build/outputs/apk/debug/

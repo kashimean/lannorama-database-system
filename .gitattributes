@@ -1,0 +1,4 @@
+# gradlew must keep a LF shebang and the executable bit, otherwise a Linux runner
+# cannot run it (exit 126) or the shebang line breaks.
+android/gradlew text eol=lf
+*.sh text eol=lf
