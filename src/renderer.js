@@ -3256,7 +3256,18 @@ if (IS_MOBILE) {
     if (exitKiosk) exitKiosk.classList.add('hidden-on-mobile');
 }
 
-if (IS_MOBILE && 'serviceWorker' in navigator) {
+// Chrome requires a service worker before it will offer to install a PWA, so this must run on
+// desktop browsers too - gating it on IS_MOBILE made the app non-installable from a desktop.
+// A secure context is the real requirement: https (or localhost) works, file:// does not.
+const SW_REGISTERABLE = ('serviceWorker' in navigator) &&
+    (window.isSecureContext || ['https:', 'http:'].includes(window.location.protocol));
+
+// Must match VERSION in src/sw.js. The page reports its own version to the worker and only
+// shows the update prompt when the worker is serving a different one - otherwise every load
+// would claim an update was available.
+const APP_VERSION = 'v1.0.22';
+
+if (SW_REGISTERABLE) {
     navigator.serviceWorker.register('sw.js').catch(() => {
         // Registration fails on file:// (the Capacitor build serves from https://localhost,
         // so this only matters when the page is opened directly from disk).
@@ -3264,6 +3275,7 @@ if (IS_MOBILE && 'serviceWorker' in navigator) {
 
     navigator.serviceWorker.addEventListener('message', (event) => {
         if (!event.data || event.data.type !== 'UPDATE_AVAILABLE') return;
+        if (event.data.version === APP_VERSION) return;
 
         const popup = document.getElementById('updatePopup');
         const body = document.getElementById('updatePopupBody');
@@ -3271,7 +3283,8 @@ if (IS_MOBILE && 'serviceWorker' in navigator) {
 
         body.textContent = 'A newer version is available. Reload to load it.';
 
-        // There is no download/install step on mobile - the shell is just files.
+        // There is no download/install step on mobile - the shell is just files. On a desktop
+        // browser the same applies, but the wording has to stay honest about reloading.
         const dl = document.getElementById('popupDownload');
         const inst = document.getElementById('popupInstall');
         if (dl) dl.style.display = 'none';
@@ -3283,4 +3296,15 @@ if (IS_MOBILE && 'serviceWorker' in navigator) {
 
         popup.style.display = 'flex';
     });
+
+    // Ask the worker what version it is serving. Do this on every load, and again whenever the
+    // worker installs a new version, so a shell update is noticed without a manual reload.
+    const checkShellVersion = () => {
+        const reg = navigator.serviceWorker;
+        const sw = reg.controller || (reg.active || reg.waitting || reg.installing);
+        if (sw) sw.postMessage({ type: 'CHECK_UPDATE', version: APP_VERSION });
+    };
+
+    navigator.serviceWorker.ready.then(checkShellVersion).catch(() => {});
+    navigator.serviceWorker.addEventListener('controllerchange', checkShellVersion);
 }
