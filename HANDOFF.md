@@ -461,3 +461,46 @@ only works over HTTPS. On the Capacitor Android build, sw.js registers from http
 
 Nothing in the code is half-edited: src/manifest.webmanifest, src/sw.js, the head links in
 src/index.html and the responsive CSS are all committed (dd3e836 / 22c566e), node --check green.
+
+## PWA — FIXED AND VERIFIED LIVE (2026-11-09)
+
+Two independent causes, both fixed:
+
+1. **Pages served the wrong folder.** Source path was `main:/docs`, which does not exist, so the
+   site root returned GitHub's 404 page and the app was only reachable under `/src/`. The REST API
+   cannot change a legacy site's path (POST returned 409 "GitHub Pages is already enabled"), so the
+   site was switched to `build_type: workflow` (PUT, HTTP 204) and `.github/workflows/pages.yml`
+   was added, which copies `src/*` into `site/` and publishes it at the site root.
+   Run 42572745987 deployed successfully.
+
+2. **The service worker was gated on `IS_MOBILE`.** Chrome requires a service worker before it
+   offers to install a PWA, so gating registration on mobile made the app non-installable from a
+   desktop. Now gated on secure context (`window.isSecureContext` or https/http); `file://` still
+   cannot register, which is correct for the Electron build.
+
+   The update prompt was also dead: nothing ever posted `CHECK_UPDATE`, so `UPDATE_AVAILABLE` never
+   fired. The page now reports its own version (`APP_VERSION = 'v1.0.22'`, must match `VERSION` in
+   src/sw.js) and only shows the prompt when the worker serves a different one — otherwise every
+   load would claim an update. Checks on load and on `controllerchange`.
+
+Verified live after deploy:
+
+```
+200 text/html                  /                      <- the app, not the 404 page
+200 text/html                  /index.html
+200 application/manifest+json  /manifest.webmanifest
+200 application/javascript     /sw.js
+200 image/png                  /assets/pwa-192.png
+200 image/png                  /assets/pwa-512.png
+200 image/png                  /assets/apple-touch-icon.png
+200 application/javascript     /renderer.js
+200 text/css                   /style.css
+```
+
+Installability requirements are all met: HTTPS, manifest with name + 192/512 icons,
+`start_url: ./index.html`, `scope: ./`, `display: standalone`, and a service worker with a fetch
+handler. Open https://kashimean.github.io/lannorama-database-system/ and use the browser's install
+prompt (Chrome address-bar icon, or "Add to Home Screen" on iOS/Android).
+
+Commits: 8199ea1 (service worker gating + version check), 827bc15 (Pages workflow). Tree clean,
+`node --check` green on src/renderer.js and src/sw.js.
