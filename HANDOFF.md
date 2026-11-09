@@ -433,3 +433,31 @@ Workflow: checkout -> setup-node 20 -> setup-java 17 (Capacitor 6 / AGP 8 need J
 `npm ci` -> `npx cap sync android` (android/ is committed, so `cap add android` would fail) ->
 `./gradlew assembleDebug --no-daemon` -> upload artifact. Trigger with Actions tab ->
 "Build Android APK" -> Run workflow, or the GitHub API dispatch.
+
+## PWA not working — root cause found (diagnosed 2026-11-09)
+
+GitHub Pages is enabled but its **source path is `/docs`**, and there is no `docs/` folder in the
+repo. So the site root serves GitHub's 404 page, and the app is only reachable under `/src/`:
+
+- `https://kashimean.github.io/lannorama-database-system/index.html` -> 200 but it is GitHub's
+  404 page (`<html lang="en-US">`), NOT the app.
+- `.../src/index.html` -> 200 (the real app)
+- `.../src/manifest.webmanifest` -> 200, `content-type: application/manifest+json` (correct)
+- `.../src/sw.js` -> 200, `application/javascript`
+- `.../manifest.webmanifest` and `.../sw.js` at the site root -> 404
+
+So the manifest and service worker are served correctly, but only inside `/src/`, which means the
+installable start_url/scope is `/src/` rather than the site root — and anyone opening the plain
+site URL gets the 404 page, so nothing looks installable.
+
+Fix (needs the user, the API cannot change the path of an existing legacy Pages site — POST
+returned 409 "GitHub Pages is already enabled"):
+  Settings -> Pages -> source path from `/docs` to `/src` (or build from the repo root and move
+  the app files). After that: start_url `./index.html`, scope `./`, sw and icons all resolve at
+  the site root.
+
+Also note: the manifest/service worker do nothing in the Electron build (file:// origin) — PWA
+only works over HTTPS. On the Capacitor Android build, sw.js registers from https://localhost.
+
+Nothing in the code is half-edited: src/manifest.webmanifest, src/sw.js, the head links in
+src/index.html and the responsive CSS are all committed (dd3e836 / 22c566e), node --check green.
