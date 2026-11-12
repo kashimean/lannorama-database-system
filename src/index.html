@@ -482,6 +482,28 @@
                                 <option value="off">Off (silent)</option>
                             </select>
                         </div>
+                        <div class="form-group full-width">
+                            <label for="notifyHour">Notification hour</label>
+                            <input type="number" id="notifyHour" min="0" max="23" step="1" value="7">
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 14px; display: flex; flex-direction: column; gap: 10px;">
+                        <label style="display:flex;gap:8px;align-items:center;color:var(--text-muted);font-size:0.92rem;">
+                            <input type="checkbox" id="notifyDueToggle">
+                            Notify when items are due today
+                        </label>
+                        <label style="display:flex;gap:8px;align-items:center;color:var(--text-muted);font-size:0.92rem;">
+                            <input type="checkbox" id="notifyOverdueToggle">
+                            Notify when items are overdue
+                        </label>
+                        <p style="color: var(--text-muted); font-size: 0.86rem; margin: 0;">
+                            Each item is announced once per day, so reopening the app does not repeat the same
+                            student. On the desktop app this also fires at the hour above while the app is open;
+                            on the PWA it fires on launch and, when installed, through periodic background sync
+                            (Chrome/Android only, at the browser's own timing).
+                        </p>
+                        <button class="btn btn-secondary" id="btnTestNotification">🔔 Test notification permission</button>
                     </div>
 
                     <div style="margin-top: 20px; display: flex; gap: 12px;">

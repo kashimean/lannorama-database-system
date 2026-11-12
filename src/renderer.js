@@ -635,6 +635,11 @@ let checkouts = JSON.parse(localStorage.getItem('media_tracker_checkouts')) || D
 const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwafWSa7a8TZMU3vihFUHEuyeEjfVIVUUYRv-doKix8wCymq5oNTWN77dxpoKVP70aL/exec';
 let settings = JSON.parse(localStorage.getItem('media_tracker_settings')) || { webAppUrl: DEFAULT_APPS_SCRIPT_URL };
 if (!settings.webAppUrl) settings.webAppUrl = DEFAULT_APPS_SCRIPT_URL;
+// Notification defaults. Both kinds are on, the check runs at 07:00 local, and each item is
+// announced at most once per day.
+if (settings.notifyDue === undefined) settings.notifyDue = true;
+if (settings.notifyOverdue === undefined) settings.notifyOverdue = true;
+if (!settings.notifyHour) settings.notifyHour = 7;
 
 let users = JSON.parse(localStorage.getItem('media_tracker_users')) || DEFAULT_USERS;
 let blacklist = JSON.parse(localStorage.getItem('media_tracker_blacklist')) || [];
@@ -776,6 +781,10 @@ const btnSaveStudent = document.getElementById('btnSaveStudent');
 const googleWebAppUrlInput = document.getElementById('googleWebAppUrlInput');
 const btnSaveCloudSettings = document.getElementById('btnSaveCloudSettings');
 const btnSyncNow = document.getElementById('btnSyncNow');
+const notifyHourInput = document.getElementById('notifyHour');
+const notifyDueToggle = document.getElementById('notifyDueToggle');
+const notifyOverdueToggle = document.getElementById('notifyOverdueToggle');
+const btnTestNotification = document.getElementById('btnTestNotification');
 const btnExportData = document.getElementById('btnExportData');
 const btnLoadSampleData = document.getElementById('btnLoadSampleData');
 const appsScriptCodeTextarea = document.getElementById('appsScriptCodeTextarea');
@@ -2661,6 +2670,9 @@ function loadSettingsInputs() {
     if (skip) skip.checked = settings.skipWeekends !== false;
     const sound = document.getElementById('soundToggle');
     if (sound) sound.value = settings.soundMuted ? 'off' : 'on';
+    if (notifyHourInput) notifyHourInput.value = Number(settings.notifyHour) || 7;
+    if (notifyDueToggle) notifyDueToggle.checked = !!settings.notifyDue;
+    if (notifyOverdueToggle) notifyOverdueToggle.checked = !!settings.notifyOverdue;
 }
 
 const soundToggle = document.getElementById('soundToggle');
@@ -2682,6 +2694,9 @@ if (autoBlacklistToggle) {
 
 btnSaveCloudSettings.addEventListener('click', () => {
     settings.webAppUrl = googleWebAppUrlInput.value.trim();
+    settings.notifyHour = Math.min(23, Math.max(0, Number(notifyHourInput.value) || 7));
+    settings.notifyDue = !!notifyDueToggle.checked;
+    settings.notifyOverdue = !!notifyOverdueToggle.checked;
     saveData();
 
     if (settings.webAppUrl) {
@@ -3259,6 +3274,166 @@ if (IS_MOBILE) {
 // Chrome requires a service worker before it will offer to install a PWA, so this must run on
 // desktop browsers too - gating it on IS_MOBILE made the app non-installable from a desktop.
 // A secure context is the real requirement: https (or localhost) works, file:// does not.
+// --- NOTIFICATIONS (due today / overdue) ---
+// Each item is announced at most once per day, so relaunching the app or re-running the check
+// does not repeat the same student. Keys live in localStorage and are mirrored to IndexedDB so
+// the service worker can use them during a background sync (a worker cannot read localStorage).
+//
+// Delivery is local, not server push. A push that arrives while the app is closed needs a push
+// service and a VAPID-signed sender, and Apps Script cannot sign a VAPID JWT, so this backend
+// cannot wake a closed PWA. What is actually possible:
+//   - the .exe: a timer in the main process fires at the configured hour while the app is open
+//     (minimised is fine, closed is not), plus once on launch;
+//   - the PWA: on launch, at the configured hour while the page is open, and via Periodic
+//     Background Sync when installed (Chrome/Android only, browser decides the timing, minimum
+//     interval about 12 hours).
+const NOTIFY_STATE_KEY = 'media_tracker_notified';
+let notifyState = {};
+try { notifyState = JSON.parse(localStorage.getItem(NOTIFY_STATE_KEY)) || {}; } catch (e) { notifyState = {}; }
+
+function saveNotifyState() {
+    // A test session leaves nothing behind, same rule as the data arrays.
+    if (!isTestSession()) localStorage.setItem(NOTIFY_STATE_KEY, JSON.stringify(notifyState));
+}
+
+function notifyKey(kind, id) {
+    return kind + '|' + localDateStr(new Date()) + '|' + String(id);
+}
+
+function alreadyNotified(kind, id) {
+    return !!notifyState[notifyKey(kind, id)];
+}
+
+function markNotified(kind, id) {
+    notifyState[notifyKey(kind, id)] = true;
+    // Only today's and yesterday's keys matter, so the map cannot grow forever.
+    const today = localDateStr(new Date());
+    const yest = localDateStr(addDays(new Date(), -1));
+    Object.keys(notifyState).forEach(k => {
+        const d = String(k).split('|')[1];
+        if (d !== today && d !== yest) delete notifyState[k];
+    });
+    saveNotifyState();
+}
+
+function showNotification(title, body, tag) {
+    if (window.electronAPI && typeof window.electronAPI.showNotification === 'function') {
+        window.electronAPI.showNotification({ title, body, tag });
+        return true;
+    }
+    if (!('Notification' in window) || Notification.permission !== 'granted') return false;
+    try {
+        new Notification(title, { body, tag, icon: 'assets/icon.png' });
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+function msUntilLocalHour(hour) {
+    const now = new Date();
+    const next = new Date(now);
+    next.setHours(Number(hour) || 7, 0, 0, 0);
+    if (next <= now) next.setDate(next.getDate() + 1);
+    return next - now;
+}
+
+function dueAndOverdue() {
+    const active = checkouts.filter(c => c.status === 'active');
+    return {
+        due: active.filter(c => checkoutStatus(c) === 'due_today'),
+        late: active.filter(c => checkoutStatus(c) === 'overdue')
+    };
+}
+
+function runNotificationChecks(source) {
+    if (!settings.notifyDue && !settings.notifyOverdue) return 0;
+    const lists = dueAndOverdue();
+    let sent = 0;
+
+    if (settings.notifyDue) {
+        lists.due.forEach(c => {
+            if (alreadyNotified('due', c.id)) return;
+            markNotified('due', c.id);
+            showNotification('Due today: ' + c.studentName, c.equipmentName + ' is due today.', 'due-' + c.id);
+            sent++;
+        });
+    }
+
+    if (settings.notifyOverdue) {
+        lists.late.forEach(c => {
+            if (alreadyNotified('overdue', c.id)) return;
+            markNotified('overdue', c.id);
+            showNotification('Overdue: ' + c.studentName, c.equipmentName + ' was due ' + (c.returnDate || 'unknown date') + '.', 'overdue-' + c.id);
+            sent++;
+        });
+    }
+
+    if (sent) logSync('Notifications sent: ' + sent + ' (' + source + ')', 'ok');
+    return sent;
+}
+
+// Same origin, so the worker can open the same database the page writes to.
+const NOTIFY_DB = 'lannorama-notify';
+
+function openNotifyDb() {
+    return new Promise((resolve, reject) => {
+        if (!('indexedDB' in window)) return reject(new Error('no indexedDB'));
+        const req = indexedDB.open(NOTIFY_DB, 1);
+        req.onupgradeneeded = () => { req.result.createObjectStore('state'); };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+    });
+}
+
+async function writeNotifySnapshot() {
+    if (!settings.notifyDue && !settings.notifyOverdue) return;
+    const lists = dueAndOverdue();
+    const snapshot = {
+        hour: Number(settings.notifyHour) || 7,
+        date: localDateStr(new Date()),
+        // The worker cannot read localStorage, so the URL it needs to re-check the table has to
+        // travel in the snapshot. Without it a background sync has nothing to read.
+        url: settings.webAppUrl || '',
+        due: lists.due.map(c => ({ studentName: c.studentName, equipmentName: c.equipmentName, id: c.id })),
+        late: lists.late.map(c => ({ studentName: c.studentName, equipmentName: c.equipmentName, id: c.id, due: c.returnDate }))
+    };
+    try {
+        const db = await openNotifyDb();
+        db.transaction('state', 'readwrite').objectStore('state').put(snapshot, 'snapshot');
+    } catch (e) {
+        // Background sync is best effort; the page path still works.
+    }
+}
+
+async function initNotifications() {
+    if (window.electronAPI && typeof window.electronAPI.configureNotifications === 'function') {
+        window.electronAPI.configureNotifications(Number(settings.notifyHour) || 7);
+    }
+
+    if ('Notification' in window && Notification.permission === 'default') {
+        try { await Notification.requestPermission(); } catch (e) {}
+    }
+
+    runNotificationChecks('launch');
+    writeNotifySnapshot();
+
+    // The main process owns the scheduled timer (it is the only thing that can outlive a page
+    // reload), so the renderer reacts to its tick and does the actual announcing.
+    if (window.electronAPI && typeof window.electronAPI.onNotifyTick === 'function') {
+        window.electronAPI.onNotifyTick(() => {
+            runNotificationChecks('scheduled');
+            writeNotifySnapshot();
+        });
+    }
+
+    // In the browser/PWA there is no main process, so the page schedules its own tick.
+    setTimeout(() => {
+        runNotificationChecks('scheduled');
+        writeNotifySnapshot();
+    }, msUntilLocalHour(settings.notifyHour));
+}
+
 const SW_REGISTERABLE = ('serviceWorker' in navigator) &&
     (window.isSecureContext || ['https:', 'http:'].includes(window.location.protocol));
 
@@ -3307,4 +3482,34 @@ if (SW_REGISTERABLE) {
 
     navigator.serviceWorker.ready.then(checkShellVersion).catch(() => {});
     navigator.serviceWorker.addEventListener('controllerchange', checkShellVersion);
+
+    // Periodic Background Sync (Chrome/Android, installed PWA only). The browser chooses when it
+    // runs and the minimum interval is about 12 hours, so this is best effort - it is not a
+    // guaranteed 7am. It needs the manifest to declare periodic_sync and the app to be installed.
+    navigator.serviceWorker.ready.then((reg) => {
+        if (!reg.periodicSync) return;
+        reg.periodicSync.register('due-check', { minInterval: 24 * 60 * 60 * 1000 }).catch(() => {});
+    }).catch(() => {});
 }
+
+// Test button in Settings: proves the permission and the delivery path work without waiting for
+// a real due item.
+if (btnTestNotification) {
+    btnTestNotification.addEventListener('click', async () => {
+        if (!('Notification' in window) && !(window.electronAPI && window.electronAPI.showNotification)) {
+            showToast('This build cannot show notifications.', 'error');
+            return;
+        }
+        if ('Notification' in window && Notification.permission !== 'granted') {
+            const perm = await Notification.requestPermission();
+            if (perm !== 'granted') {
+                showToast('Notification permission was not granted.', 'warning');
+                return;
+            }
+        }
+        const ok = showNotification('Lannorama test notification', 'Notifications are working. Due and overdue items will appear here.', 'test-notification');
+        showToast(ok ? 'Test notification sent.' : 'Permission granted but the notification did not display.', 'warning');
+    });
+}
+
+initNotifications();

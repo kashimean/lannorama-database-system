@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, Notification } = require('electron');
 const path = require('path');
 const { initUpdater } = require('./updater');
 
@@ -102,6 +102,49 @@ ipcMain.handle('print:logs', (event) => {
       resolve({ success: false, failureType: String(err) });
     }
   });
+});
+
+// Notifications (due today / overdue). The timer lives in the main process because the renderer
+// cannot run anything while the window is closed. It fires at the configured hour on the dot,
+// then the renderer decides what to announce (it owns the data and the once-per-day dedupe).
+// If the app is not running at that hour nothing fires - Electron has no way to wake a closed
+// app, so the launch-time check is the fallback.
+let notifyHour = 7;
+let notifyTimer = null;
+
+function msUntilLocalHour(hour) {
+  const now = new Date();
+  const next = new Date(now);
+  next.setHours(hour, 0, 0, 0);
+  if (next <= now) next.setDate(next.getDate() + 1);
+  return next - now;
+}
+
+function scheduleNotifyTick() {
+  if (notifyTimer) clearTimeout(notifyTimer);
+  notifyTimer = setTimeout(() => {
+    if (winRef && !winRef.isDestroyed()) {
+      winRef.webContents.send('notify:tick', { hour: notifyHour });
+    }
+    scheduleNotifyTick();
+  }, msUntilLocalHour(notifyHour));
+}
+
+ipcMain.handle('notify:configure', (_event, hour) => {
+  notifyHour = Math.min(23, Math.max(0, Number(hour) || 7));
+  scheduleNotifyTick();
+  return notifyHour;
+});
+
+ipcMain.handle('notify:show', (_event, payload) => {
+  if (!Notification.isSupported()) return false;
+  const n = new Notification({
+    title: String((payload && payload.title) || 'Lannorama'),
+    body: String((payload && payload.body) || ''),
+    tag: String((payload && payload.tag) || '')
+  });
+  n.show();
+  return true;
 });
 
 app.whenReady().then(() => {

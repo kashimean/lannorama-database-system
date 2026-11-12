@@ -16,5 +16,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.on('kiosk:state', (_event, on) => callback(on));
     },
 
-    printLogs: () => ipcRenderer.invoke('print:logs')
+    printLogs: () => ipcRenderer.invoke('print:logs'),
+
+    // Notifications (due today / overdue). The main process owns the scheduled timer because the
+    // renderer cannot run anything while the window is closed.
+    showNotification: (payload) => ipcRenderer.invoke('notify:show', payload),
+    configureNotifications: (hour) => ipcRenderer.invoke('notify:configure', hour),
+    onNotifyTick: (callback) => {
+        ipcRenderer.on('notify:tick', (_event, info) => callback(info));
+    }
 });
