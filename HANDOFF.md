@@ -504,3 +504,41 @@ prompt (Chrome address-bar icon, or "Add to Home Screen" on iOS/Android).
 
 Commits: 8199ea1 (service worker gating + version check), 827bc15 (Pages workflow). Tree clean,
 `node --check` green on src/renderer.js and src/sw.js.
+
+## Notifications (due today / overdue) — implemented and released as v1.0.23
+
+Settings > new controls: notify when due today, notify when overdue, notification hour (default
+7), plus a test button that requests permission and sends one notification.
+
+Once per item per day, keyed `kind|date|id`, so relaunching the app or re-running the check does
+not repeat the same student. Keys are pruned to today/yesterday so the map cannot grow. Due today
+is NOT overdue (same rule as `checkoutStatus`); overdue starts the day after.
+
+**Electron (.exe)**: the timer lives in `src/main.js` because the renderer cannot run anything
+while the window is closed. `ipcMain.handle('notify:configure')` schedules the next occurrence of
+the hour, `notify:tick` is sent to the renderer, which owns the data and the dedupe.
+`ipcMain.handle('notify:show')` uses Electron's `Notification` (Windows toast). If the app is not
+running at that hour nothing fires — Electron cannot wake a closed app, so the launch-time check
+is the fallback. `initNotifications()` also runs the check on launch.
+
+**PWA**: the page checks on launch and at the configured hour while it is open. For background
+delivery the service worker uses Periodic Background Sync (tag `due-check`), the only thing that
+can run while a PWA is closed. A worker cannot read localStorage, so the page mirrors a snapshot
+(hour, url, date, due, late) into IndexedDB `lannorama-notify`; the worker re-reads the table when
+online because a snapshot from an earlier day cannot know what is due today, and keeps its own
+once-per-day map in the same store.
+
+Honest limits (in the code comments): real server push needs a push service and a VAPID-signed
+sender, and Apps Script cannot sign a VAPID JWT, so this backend cannot wake a closed PWA.
+Periodic sync is Chrome/Android only, needs the app installed, the browser chooses the timing, and
+the minimum interval is about 12 hours — so 7am is not guaranteed there.
+
+Verified: `node --check` green on renderer.js, main.js, preload.js, sw.js, auth.js; manifest parses
+as JSON with `periodic_sync.tag = due-check`. Live Pages deploy run 43130188746 succeeded and the
+live manifest/sw.js contain the new code. Android APK run 43130788080 succeeded.
+
+Release v1.0.23 published: setup exe 77,952,363 bytes, blockmap 83,005, latest.yml 381. Icon
+embedding re-verified 6/6 in both the app exe and the setup exe (16/32/48/64/128/256).
+`sw.js` VERSION and renderer `APP_VERSION` both bumped to v1.0.23 so the update prompt matches.
+
+Commits: 053e48a (feature), 888eb4b (version bump). main pushed, tree clean.
