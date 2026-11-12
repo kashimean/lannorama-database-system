@@ -7,7 +7,7 @@
 //
 // Bump VERSION when the shell changes so clients get a fresh copy.
 
-const VERSION = 'v1.0.22';
+const VERSION = 'v1.0.23';
 const CACHE = 'lannorama-shell-' + VERSION;
 
 const SHELL = [
