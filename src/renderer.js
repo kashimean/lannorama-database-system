@@ -3458,7 +3458,7 @@ const SW_REGISTERABLE = ('serviceWorker' in navigator) &&
 // Must match VERSION in src/sw.js. The page reports its own version to the worker and only
 // shows the update prompt when the worker is serving a different one - otherwise every load
 // would claim an update was available.
-const APP_VERSION = 'v1.0.23';
+const APP_VERSION = 'v1.0.24';
 
 if (SW_REGISTERABLE) {
     navigator.serviceWorker.register('sw.js').catch(() => {
