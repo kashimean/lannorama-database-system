@@ -573,3 +573,19 @@ Still open (found, NOT yet fixed):
    Should show the popup only when a worker is genuinely waiting (reg.waiting) and on reload
    unregister the registration so the next load re-registers from the network; also respect a
    "Later" dismissal so it does not immediately reappear.
+
+## PWA updater — two bugs fixed (this session)
+
+1. **"Later" did nothing on the PWA.** `popupLater` was only wired inside the
+   `if (window.electronAPI && window.electronAPI.getUpdaterState)` branch, so in a browser/PWA the
+   button had no handler. Added `dismissUpdatePopup()` (sets `updatePopupDismissed`) and wired it in
+   both paths; the PWA message handler now returns early when the popup has been dismissed, so it
+   does not immediately reappear on the next check.
+
+2. **The notice repeated after Reload.** The check compares the page's `APP_VERSION` with the
+   worker's `VERSION`; a plain reload does not replace a stale worker, so the same notice came back.
+   Reload now unregisters the registration first, forcing the next load to register from the network
+   (which is what actually picks up the new shell). `checkShellVersion()` prefers `reg.waiting` over
+   `reg.active` so a waiting worker is the one asked.
+
+`node --check` green on src/renderer.js. Both fixes are in the same commit as the cloudRowsFor fix.

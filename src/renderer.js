@@ -2773,6 +2773,15 @@ if (btnCleanDupes) {
 
 // --- AUTO-UPDATER UI ---
 let updatePopupShown = false;
+let updatePopupDismissed = false;
+
+// "Later" has to work in both builds. It was only wired inside the Electron branch, so on the
+// PWA/browser the button did nothing.
+function dismissUpdatePopup() {
+    updatePopupDismissed = true;
+    const popup = document.getElementById('updatePopup');
+    if (popup) popup.style.display = 'none';
+}
 
 function showUpdatePopup(state) {
     const popup = document.getElementById('updatePopup');
@@ -2824,9 +2833,7 @@ if (window.electronAPI && window.electronAPI.getUpdaterState) {
     const popupLater = document.getElementById('popupLater');
     if (popupDownload) popupDownload.addEventListener('click', () => window.electronAPI.downloadUpdate());
     if (popupInstall) popupInstall.addEventListener('click', () => window.electronAPI.installUpdate());
-    if (popupLater) popupLater.addEventListener('click', () => {
-        document.getElementById('updatePopup').style.display = 'none';
-    });
+    if (popupLater) popupLater.addEventListener('click', dismissUpdatePopup);
 } else {
     updaterStatusText.textContent = 'Updater is only active in the packaged EXE (open in a browser or run "npm start" for dev mode).';
 }
@@ -3462,6 +3469,7 @@ if (SW_REGISTERABLE) {
     navigator.serviceWorker.addEventListener('message', (event) => {
         if (!event.data || event.data.type !== 'UPDATE_AVAILABLE') return;
         if (event.data.version === APP_VERSION) return;
+        if (updatePopupDismissed) return;
 
         const popup = document.getElementById('updatePopup');
         const body = document.getElementById('updatePopupBody');
@@ -3477,7 +3485,14 @@ if (SW_REGISTERABLE) {
         if (inst) {
             inst.textContent = '🚀 Reload for update';
             inst.style.display = 'inline-block';
-            inst.onclick = () => window.location.reload();
+            inst.onclick = () => {
+                // A plain reload does not replace a stale worker - the browser keeps the existing
+                // registration until it is swapped out. Unregistering forces the next load to
+                // register from the network, which is what actually picks up the new shell.
+                navigator.serviceWorker.getRegistration().then((reg) => {
+                    if (reg) reg.unregister();
+                }).catch(() => {}).finally(() => window.location.reload());
+            };
         }
 
         popup.style.display = 'flex';
@@ -3487,7 +3502,7 @@ if (SW_REGISTERABLE) {
     // worker installs a new version, so a shell update is noticed without a manual reload.
     const checkShellVersion = () => {
         const reg = navigator.serviceWorker;
-        const sw = reg.controller || (reg.active || reg.waitting || reg.installing);
+        const sw = reg.controller || (reg.waiting || reg.installing || reg.active);
         if (sw) sw.postMessage({ type: 'CHECK_UPDATE', version: APP_VERSION });
     };
 
