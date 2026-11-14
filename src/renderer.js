@@ -1121,6 +1121,13 @@ const SHEET_NAME_BY_BASE = {
     user: 'Users', blacklist: 'Blacklist', auth: 'Auth'
 };
 
+// The keys the server actually returns (lowercased sheet names). These are PLURAL, while
+// baseTypeOf() returns the singular action base, so the two must not be used interchangeably.
+const CLOUD_KEY_BY_BASE = {
+    equipment: 'equipment', student: 'students', checkout: 'checkouts', log: 'checkouts',
+    user: 'users', blacklist: 'blacklist', auth: 'auth'
+};
+
 function sheetNameForAction(a) {
     if (a.type === 'assign_id') return (a.data && a.data.sheet) || 'Students';
     return SHEET_NAME_BY_BASE[baseTypeOf(a.type)] || 'Equipment';
@@ -1129,7 +1136,11 @@ function sheetNameForAction(a) {
 function cloudRowsFor(cloud, a) {
     const type = String(a.type || '');
     if (type === 'assign_id') return cloud[(a.data && a.data.sheet ? String(a.data.sheet).toLowerCase() : 'students')] || [];
-    const key = baseTypeOf(type);
+    // The server returns PLURAL keys (equipment, students, checkouts, users, blacklist, auth),
+    // but baseTypeOf() gives the singular action base ('student', 'checkout', 'user'). Using
+    // baseTypeOf directly made those lookups undefined, so a checkout that had actually landed
+    // was reported as never reaching the server and the app asked for a redeploy.
+    const key = CLOUD_KEY_BY_BASE[baseTypeOf(type)];
     return cloud[key] || [];
 }
 

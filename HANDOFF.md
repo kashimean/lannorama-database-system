@@ -542,3 +542,34 @@ embedding re-verified 6/6 in both the app exe and the setup exe (16/32/48/64/128
 `sw.js` VERSION and renderer `APP_VERSION` both bumped to v1.0.23 so the update prompt matches.
 
 Commits: 053e48a (feature), 888eb4b (version bump). main pushed, tree clean.
+
+## Checkout queue error — ROOT CAUSE FOUND AND FIXED (this session)
+
+Symptom: queue shows "CHECKOUT Colton Moeding" and the app asks for a redeploy of the Apps Script
+even though the deployed script is current.
+
+Evidence that the backend is fine (verified live):
+- `?action=ping` -> 200 application/json, sheets listed (Checkouts rows: 30).
+- `?action=headers` -> 200, no mismatched/duplicate/blank columns on any sheet. The deployed
+  version therefore DOES support headers/repair, i.e. it is the new code.
+- `?sheet=Checkouts` contains both Colton Moeding rows (ids co-1794606730222 and co-1794672896208),
+  so the checkout actually landed. The app was wrong to report it as missing.
+
+Actual bug: `cloudRowsFor()` used `cloud[baseTypeOf(type)]`, which yields the SINGULAR action base
+('student', 'checkout', 'user'), but the server returns PLURAL keys (equipment, students,
+checkouts, users, blacklist, auth). Those lookups returned undefined/[] , so `actionAppliedInCloud`
+answered false for every student, checkout and user action, and verifyQueue reported them as never
+reaching the server -> "redeploy as a NEW version". Equipment/blacklist/auth happened to work
+because their singular and plural forms are identical.
+
+Fix: added `CLOUD_KEY_BY_BASE` (singular base -> plural cloud key) and used it in `cloudRowsFor()`.
+`node --check` green.
+
+Still open (found, NOT yet fixed):
+1. `popupLater` ("Later") is only wired inside the `if (window.electronAPI && ...getUpdaterState)`
+   branch, so on the PWA/browser the button does nothing. Needs wiring outside that branch.
+2. PWA update notice repeats after Reload. The check compares the page's hardcoded APP_VERSION with
+   the worker's VERSION; a stale worker is not replaced by a plain reload, so the notice persists.
+   Should show the popup only when a worker is genuinely waiting (reg.waiting) and on reload
+   unregister the registration so the next load re-registers from the network; also respect a
+   "Later" dismissal so it does not immediately reappear.
